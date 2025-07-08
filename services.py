@@ -153,23 +153,22 @@ def obtener_Mensaje_whatsapp(message):
     t = message['type']
     if t == 'text':
         return message['text']['body']
-    elif t == 'button':
+    if t == 'button':
         return message['button']['text']
-    elif t == 'interactive':
-        interactive = message['interactive']
-        if interactive['type'] == 'list_reply':
-            return interactive['list_reply']['id']
-        elif interactive['type'] == 'button_reply':
-            return interactive['button_reply']['id']
+    if t == 'interactive':
+        ip = message['interactive']
+        if ip['type'] == 'list_reply':
+            return ip['list_reply']['id']
+        if ip['type'] == 'button_reply':
+            return ip['button_reply']['id']
     return 'mensaje no procesado'
-
 
 def enviar_Mensaje_whatsapp(data):
     """Envía un payload JSON a la API de WhatsApp."""
     try:
         headers = {
             'Content-Type': 'application/json',
-            'Authorization': f"Bearer {sett.whatsapp_token}"
+            'Authorization': f"Bearer {sett.WHATSAPP_TOKEN}"
         }
         print("--- Enviando JSON ---")
         try:
@@ -177,7 +176,7 @@ def enviar_Mensaje_whatsapp(data):
         except:
             print(data)
         print("---------------------")
-        resp = requests.post(sett.whatsapp_url, headers=headers, data=data)
+        resp = requests.post(sett.WHATSAPP_URL, headers=headers, data=data)
         if resp.status_code == 200:
             print("Mensaje enviado correctamente")
         else:
@@ -186,7 +185,6 @@ def enviar_Mensaje_whatsapp(data):
     except Exception as e:
         print(f"Excepción al enviar mensaje: {e}")
         return str(e), 403
-
 
 def text_Message(number, text):
     return json.dumps({
@@ -197,10 +195,9 @@ def text_Message(number, text):
         "text": {"body": text}
     })
 
-
 def buttonReply_Message(number, options, body, footer, sedd, messageId):
     buttons = [
-        {"type": "reply", "reply": {"id": f"{sedd}_btn_{i+1}", "title": opt if len(opt) <= 20 else opt[:20]}}
+        {"type": "reply", "reply": {"id": f"{sedd}_btn_{i+1}", "title": opt}}
         for i, opt in enumerate(options)
     ]
     return json.dumps({
@@ -215,7 +212,6 @@ def buttonReply_Message(number, options, body, footer, sedd, messageId):
             "action": {"buttons": buttons}
         }
     })
-
 
 def listReply_Message(number, options, body, footer, sedd, messageId):
     rows = []
@@ -232,10 +228,12 @@ def listReply_Message(number, options, body, footer, sedd, messageId):
             "type": "list",
             "body": {"text": body},
             "footer": {"text": footer},
-            "action": {"button": "Ver Opciones", "sections": [{"title": "Secciones", "rows": rows}]}
+            "action": {
+                "button": "Ver Opciones",
+                "sections": [{"title": "Secciones", "rows": rows}]
+            }
         }
     })
-
 
 def replyReaction_Message(number, messageId, emoji):
     return json.dumps({
@@ -245,7 +243,6 @@ def replyReaction_Message(number, messageId, emoji):
         "type": "reaction",
         "reaction": {"message_id": messageId, "emoji": emoji}
     })
-
 
 def markRead_Message(messageId):
     return json.dumps({
