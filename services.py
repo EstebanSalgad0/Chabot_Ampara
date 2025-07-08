@@ -1418,7 +1418,7 @@ def administrar_chatbot(text, number, messageId, name):
          appointment_sessions[number]['especialidad'] = text       # ← MOD: guardo especialidad
          body = "⏰ ¿Tienes preferencia de día y hora para tu atención?"
          footer = "Agendamiento – Fecha y Hora"
-         opts = ["📅 Elegir Fecha y Hora", "⚡ Lo antes posible"]
+         opts = ["📅Fecha y Hora", "⚡Lo antes posible"]
          list_responses.append(
              buttonReply_Message(number, opts, body, footer, "cita_fecha", messageId)
          )
