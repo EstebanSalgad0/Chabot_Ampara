@@ -37,7 +37,19 @@ def recibir_mensaje():
         number    = message['from']
         messageId = message['id']
         name      = value['contacts'][0]['profile']['name']
-        text      = services.obtener_Mensaje_whatsapp(message)
+
+        # EXTRAER EL ID DE BOTÓN O LISTA SI ES MENSAJE INTERACTIVO
+        if message.get('type') == 'interactive':
+            interactive = message['interactive']
+            if interactive['type'] == 'button_reply':
+                text = interactive['button_reply']['id']
+            elif interactive['type'] == 'list_reply':
+                text = interactive['list_reply']['id']
+            else:
+                text = services.obtener_Mensaje_whatsapp(message)
+        else:
+            text = services.obtener_Mensaje_whatsapp(message)
+
         print(f"📨 Mensaje de {number} ({name}): {text}")
 
         services.administrar_chatbot(text, number, messageId, name)
