@@ -22,7 +22,7 @@ TOPIC_KEYWORDS = {
         "taquicardia", "tensión", "opresión",
         "sueño", "evitación", "miedo", "agotamiento"
     ],
-    # más topics aquí…
+    # Puedes añadir más topics aquí...
 }
 
 # ----------------------------------------
@@ -31,14 +31,14 @@ TOPIC_KEYWORDS = {
 FLOWS = {
     "ansiedad": {
         "steps": [
-            {   # Paso 0: pedir descripción
+            {   # Paso 0: pedir descripción libre
                 "type": "text",
                 "prompt": (
                     "🟢 *Describí los síntomas o sensaciones* que estás experimentando.\n"
                     "(Por ejemplo: “Me cuesta respirar”, “Siento mucha tensión”, etc.)"
                 )
             },
-            {   # Paso 1: confirmar detección
+            {   # Paso 1: confirmación detección
                 "type": "confirm",
                 "prompt": (
                     "🌿 *Detección de ansiedad*\n\n"
@@ -47,7 +47,7 @@ FLOWS = {
                 ),
                 "options": ["Sí", "No"]
             },
-            {   # Paso 2: guardar y preguntar sensación
+            {   # Paso 2: guardar + preguntar sensación
                 "type": "text",
                 "prompt": (
                     "Gracias. Guardaré tu descripción para tu terapeuta.\n"
@@ -75,7 +75,7 @@ FLOWS = {
                         "Exposición gradual.\n[Guía descargable]",
                     "Agotamiento mental":
                         "Mindfulness y autocuidado.\n[Frases + audio]"
-                }.get(choice, "Aquí tenés info sobre ese tema.")
+                }.get(choice, "Aquí tenés información sobre ese tema.")
             },
             {   # Paso 4: cierre
                 "type": "text",
@@ -182,12 +182,12 @@ def replyReaction_Message(number, messageId, emoji):
     })
 
 # ----------------------------------------
-# Dispatcher de flujos genérico
+# Dispatcher de flujos
 # ----------------------------------------
 def dispatch_flow(number, messageId, text, topic):
     cfg = session_states.get(number)
     if not cfg:
-        # primera llamada: creamos la sesión en paso=0
+        # Creamos la sesión en paso 0
         session_states[number] = {
             "topic": topic, "step": 0,
             "last_input": None, "last_choice": None
@@ -197,33 +197,29 @@ def dispatch_flow(number, messageId, text, topic):
     step = cfg["step"]
     steps = FLOWS[topic]["steps"]
 
-    # Paso 0: pedir descripción
+    # Paso 0: enviamos el prompt de descripción libre
     if step == 0:
-        # NOTA: aquí text="" porque pulsaste el menú, no hay mensaje libre todavía
-        cfg["last_input"] = ""  
-        cfg["step"] += 1
-        return enviar_Mensaje_whatsapp(
-            text_Message(number, steps[0]["prompt"])
-        )
+        cfg["step"] = 1
+        return enviar_Mensaje_whatsapp(text_Message(number, steps[0]["prompt"]))
 
-    # Paso 1: confirmación (después de que el usuario describa sus síntomas)
+    # Paso 1: recibimos descripción en `text`, contamos keywords y enviamos botones
     if step == 1:
-        # la descripción llega en `text`
         cfg["last_input"] = text.lower()
-        # contamos coincidencias
         kws = TOPIC_KEYWORDS[topic]
-        cnt = sum(bool(re.search(rf"\b{re.escape(kw)}\b", cfg["last_input"], re.IGNORECASE))
-                  for kw in kws)
+        cnt = sum(
+            bool(re.search(rf"\b{re.escape(kw)}\b", cfg["last_input"], re.IGNORECASE))
+            for kw in kws
+        )
+        print(f"🔍 detectadas {cnt} keywords para '{topic}' en: {cfg['last_input']}")
         if cnt < 1:
-            # no detectó nada
             session_states.pop(number)
             return enviar_Mensaje_whatsapp(text_Message(
                 number,
                 "No detecté síntomas claros de ansiedad.\n"
                 "Podés describir más o consultar a un profesional."
             ))
-        # pasa al siguiente paso de confirmación
-        cfg["step"] += 1
+        # avanzamos a confirmación
+        cfg["step"] = 2
         return enviar_Mensaje_whatsapp(
             buttonReply_Message(
                 number,
@@ -235,23 +231,23 @@ def dispatch_flow(number, messageId, text, topic):
             )
         )
 
-    # Paso 2: si dijo "No"
-    if step == 2 and text.lower() == "no":
-        session_states.pop(number)
-        return enviar_Mensaje_whatsapp(text_Message(number, "¡Gracias por usar AMPARA!"))
-
-    # Paso 2 (si dijo "Sí"): pedimos guardar descripción
-    if step == 2 and text.lower() == "sí":
-        cfg["step"] += 1
+    # Paso 2: procesamos respuesta del botón (ID termina en _btn_1 o _btn_2)
+    if step == 2:
+        if text.endswith("_btn_2"):   # “No”
+            session_states.pop(number)
+            return enviar_Mensaje_whatsapp(text_Message(number, "¡Gracias por usar AMPARA!"))
+        # asumimos “Sí” (_btn_1)
+        cfg["step"] = 3
         return enviar_Mensaje_whatsapp(text_Message(number, steps[2]["prompt"]))
 
-    # Paso 3: guardamos a archivo y preguntamos sensación
+    # Paso 3: guardamos descripción y mostramos opciones de sensación
     if step == 3:
         cfg["last_input"] = text
+        # escribimos archivo
         fname = f"/mnt/data/{number}_{topic}.txt"
         with open(fname, "w", encoding="utf-8") as f:
             f.write(text)
-        cfg["step"] += 1
+        cfg["step"] = 4
         return enviar_Mensaje_whatsapp(
             buttonReply_Message(
                 number,
@@ -263,7 +259,7 @@ def dispatch_flow(number, messageId, text, topic):
             )
         )
 
-    # Paso 4: entrega de contenido y cierre
+    # Paso 4: entregamos contenido personalizado y cierre
     if step == 4:
         cfg["last_choice"] = text
         cont = steps[3]["content_fn"](text)
@@ -282,7 +278,7 @@ def administrar_chatbot(text, number, messageId, name):
     time.sleep(random.uniform(0.3, 0.7))
 
     txt = text.strip().lower()
-    # 2) Saludo y menú
+    # 2) saludo y menú
     if txt in ['hola', 'buenos días', 'buenas tardes', 'buenas noches']:
         body = (
             f"¡Hola {name}! Soy *AMPARA IA*, tu asistente virtual.\n"
@@ -302,12 +298,12 @@ def administrar_chatbot(text, number, messageId, name):
             )
         )
 
-    # 3) Selección de menú
+    # 3) selección de menú
     if text == "main_menu_btn_1":
-        # iniciamos el flujo de ansiedad en paso 0
+        # arrancamos el flujo de ansiedad
         return dispatch_flow(number, messageId, "", "ansiedad")
 
-    # 4) Si ya hay sesión activa, delegamos
+    # 4) si ya hay sesión activa, delegamos al dispatcher
     if number in session_states:
         topic = session_states[number]["topic"]
         return dispatch_flow(number, messageId, text, topic)
