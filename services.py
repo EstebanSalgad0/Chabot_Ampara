@@ -157,8 +157,10 @@ def buttonReply_Message(number, options, body, footer, sedd, messageId):
         "to":number,
         "type":"interactive",
         "interactive":{
-            "type":"button","body":{"text":body},
-            "footer":{"text":footer},"action":{"buttons":buttons}
+            "type":"button",
+            "body":{"text":body},
+            "footer":{"text":footer},
+            "action":{"buttons":buttons}
         }
     })
 
@@ -184,6 +186,7 @@ def replyReaction_Message(number, messageId, emoji):
 def dispatch_flow(number, messageId, text, topic):
     cfg = session_states.get(number)
     if not cfg:
+        # primera llamada: inicializo sesión
         session_states[number] = {
             "topic":topic,
             "step":0,
@@ -204,13 +207,14 @@ def dispatch_flow(number, messageId, text, topic):
             for kw in kws
         )
         print(f"🔍 detectadas {cnt} keywords para '{topic}' en: {cfg['last_input']}")
-        if cnt < 1:
+        if cnt < 2:
             session_states.pop(number)
             return enviar_Mensaje_whatsapp(text_Message(
                 number,
                 "No detecté síntomas claros de ansiedad.\n"
                 "Podés describir más o consultar a un profesional."
             ))
+        # avanzo a Paso 1
         cfg["step"] += 1
         return enviar_Mensaje_whatsapp(buttonReply_Message(
             number,
@@ -252,7 +256,6 @@ def dispatch_flow(number, messageId, text, topic):
         cfg["last_choice"] = text
         cont = steps[3]["content_fn"](text)
         enviar_Mensaje_whatsapp(text_Message(number,cont))
-        cfg["step"] += 1
         cierre = steps[4]["prompt"]
         session_states.pop(number)
         return enviar_Mensaje_whatsapp(text_Message(number,cierre))
@@ -261,11 +264,13 @@ def dispatch_flow(number, messageId, text, topic):
 # Dispatcher principal
 # ----------------------------------------
 def administrar_chatbot(text, number, messageId, name):
+    # marco como leído y reacciono
     enviar_Mensaje_whatsapp(markRead_Message(messageId))
     enviar_Mensaje_whatsapp(replyReaction_Message(number, messageId, "🧠"))
     time.sleep(random.uniform(0.3,0.7))
 
     txt = text.strip().lower()
+    # saludo y menú
     if txt in ['hola','buenos días','buenas tardes','buenas noches']:
         body = (
             f"¡Hola {name}! Soy *AMPARA IA*, tu asistente virtual.\n"
@@ -274,17 +279,23 @@ def administrar_chatbot(text, number, messageId, name):
             "2. Informe al Terapeuta\n"
             "3. Recordatorios Terapéuticos"
         )
-        return enviar_Mensaje_whatsapp(buttonReply_Message(
-            number,MICROSERVICES,body,"AMPARA IA","main_menu",messageId
+        enviar_Mensaje_whatsapp(buttonReply_Message(
+            number, MICROSERVICES, body, "AMPARA IA", "main_menu", messageId
         ))
+        return
 
+    # al pulsar Psicoeducación
     if text == "main_menu_btn_1":
-        prompt0 = FLOWS["ansiedad"]["steps"][0]["prompt"]
-        return enviar_Mensaje_whatsapp(text_Message(number,prompt0))
+        # lanzo dispatch_flow con texto vacío para crear sesión y mostrar paso 0
+        dispatch_flow(number, messageId, "", "ansiedad")
+        return
 
+    # si ya hay sesión activa, delego al dispatch_flow
     if number in session_states:
-        return dispatch_flow(number, messageId, text, session_states[number]["topic"])
+        dispatch_flow(number, messageId, text, session_states[number]["topic"])
+        return
 
-    return enviar_Mensaje_whatsapp(text_Message(
+    # fallback
+    enviar_Mensaje_whatsapp(text_Message(
         number,"No entendí. Escribí 'hola' para volver al menú."
     ))
