@@ -43,7 +43,7 @@ FLOWS = {
                 ),
                 "options": ["Sí", "No"]
             },
-            {   # Paso 2: guardamos y luego preguntamos sensación
+            {   # Paso 2: guardamos y preguntamos sensación
                 "prompt": (
                     "Gracias. Guardaré tu descripción para tu terapeuta.\n"
                     "Luego descarga el archivo y envíalo a tu psicólogo.\n\n"
@@ -94,13 +94,14 @@ MICROSERVICES = [
 # ----------------------------------------
 # Helpers de WhatsApp
 # ----------------------------------------
-def obtener_Mensaje_whatsapp(message):
-    if message.get("type") == "text":
-        return message["text"]["body"]
-    if message.get("type") == "button":
-        return message["button"]["text"]
-    if message.get("type") == "interactive":
-        ip = message["interactive"]
+def obtener_Mensaje_whatsapp(msg):
+    t = msg.get("type")
+    if t == "text":
+        return msg["text"]["body"]
+    if t == "button":
+        return msg["button"]["text"]
+    if t == "interactive":
+        ip = msg["interactive"]
         if ip["type"] == "list_reply":
             return ip["list_reply"]["id"]
         if ip["type"] == "button_reply":
@@ -125,13 +126,13 @@ def enviar_Mensaje_whatsapp(payload):
         print(f"❌ Error {resp.status_code}: {resp.text}")
     return resp
 
-def text_Message(number, text):
+def text_Message(number, body):
     return json.dumps({
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
         "to": number,
         "type": "text",
-        "text": {"body": text}
+        "text": {"body": body}
     })
 
 def buttonReply_Message(number, options, body, footer, sedd, messageId):
@@ -156,7 +157,6 @@ def buttonReply_Message(number, options, body, footer, sedd, messageId):
     })
 
 def listReply_Message(number, options, body, footer, sedd, messageId):
-    """List reply para más de 3 opciones (hasta 10–20)."""
     rows = []
     for i, opt in enumerate(options):
         title = opt if len(opt) <= 24 else opt[:24]
@@ -175,26 +175,27 @@ def listReply_Message(number, options, body, footer, sedd, messageId):
             "type": "list",
             "body":    {"text": body},
             "footer":  {"text": footer},
-            "action":  {"button": "Seleccionar", "sections": [
-                {"title": footer, "rows": rows}
-            ]}
+            "action":  {
+                "button": "Seleccionar",
+                "sections": [{"title": footer, "rows": rows}]
+            }
         }
     })
 
-def markRead_Message(messageId):
+def markRead_Message(mid):
     return json.dumps({
         "messaging_product": "whatsapp",
         "status": "read",
-        "message_id": messageId
+        "message_id": mid
     })
 
-def replyReaction_Message(number, messageId, emoji):
+def replyReaction_Message(number, mid, emoji):
     return json.dumps({
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
         "to": number,
         "type": "reaction",
-        "reaction": {"message_id": messageId, "emoji": emoji}
+        "reaction": {"message_id": mid, "emoji": emoji}
     })
 
 # ----------------------------------------
@@ -203,28 +204,24 @@ def replyReaction_Message(number, messageId, emoji):
 def dispatch_flow(number, messageId, text, topic):
     cfg = session_states.get(number)
     if not cfg:
-        session_states[number] = {
-            "topic": topic, "step": 0,
-            "last_input": None, "last_choice": None
-        }
+        session_states[number] = {"topic": topic, "step": 0}
         cfg = session_states[number]
 
-    step = cfg["step"]
+    step  = cfg["step"]
     steps = FLOWS[topic]["steps"]
 
-    # — Paso 0: preguntamos texto libre —
+    # Paso 0 → prompt libre
     if step == 0:
         cfg["step"] = 1
-        return enviar_Mensaje_whatsapp(
-            text_Message(number, steps[0]["prompt"])
-        )
+        return enviar_Mensaje_whatsapp(text_Message(number, steps[0]["prompt"]))
 
-    # — Paso 1: contamos keywords y enviamos Sí/No —
+    # Paso 1 → contamos keywords y confirmamos
     if step == 1:
         cfg["last_input"] = text.lower()
-        kws = TOPIC_KEYWORDS[topic]
-        cnt = sum(bool(re.search(rf"\b{re.escape(kw)}\b", cfg["last_input"], re.IGNORECASE))
-                  for kw in kws)
+        cnt = sum(
+            bool(re.search(rf"\b{re.escape(kw)}\b", cfg["last_input"], re.IGNORECASE))
+            for kw in TOPIC_KEYWORDS[topic]
+        )
         if cnt < 1:
             session_states.pop(number)
             return enviar_Mensaje_whatsapp(text_Message(
@@ -244,24 +241,15 @@ def dispatch_flow(number, messageId, text, topic):
             )
         )
 
-    # — Paso 2: procesamos respuesta Sí/No —
+    # Paso 2 → “Sí” o “No”
     if step == 2:
-        # NO termina
-        if text.endswith("_btn_2"):
+        if text.endswith("_btn_2"):  # “No”
             session_states.pop(number)
             return enviar_Mensaje_whatsapp(text_Message(number, "¡Gracias por usar AMPARA!"))
-        # SÍ: avanzamos a Paso 3
+        # “Sí”: guardo descripción y muestro lista
+        with open(f"/mnt/data/{number}_{topic}.txt", "w", encoding="utf-8") as f:
+            f.write(cfg["last_input"])
         cfg["step"] = 3
-        return enviar_Mensaje_whatsapp(text_Message(number, steps[2]["prompt"]))
-
-    # — Paso 3: guardamos descripción y mostramos LISTA —
-    if step == 3:
-        cfg["last_input"] = text
-        # guardamos a archivo
-        fname = f"/mnt/data/{number}_{topic}.txt"
-        with open(fname, "w", encoding="utf-8") as f:
-            f.write(text)
-        cfg["step"] = 4
         return enviar_Mensaje_whatsapp(
             listReply_Message(
                 number,
@@ -273,14 +261,17 @@ def dispatch_flow(number, messageId, text, topic):
             )
         )
 
-    # — Paso 4: entregamos contenido y cierre —
-    if step == 4:
-        cfg["last_choice"] = text
-        cont = steps[3]["content_fn"](text)
+    # Paso 3 → entrega contenido y cierre
+    if step == 3:
+        # recibimos e.g. "ansiedad_sens_row_2"
+        idx = int(text.split("_")[-1]) - 1
+        sel = steps[2]["options"][idx]
+        cont = steps[3]["content_fn"](sel)
         enviar_Mensaje_whatsapp(text_Message(number, cont))
         cierre = steps[4]["prompt"]
         session_states.pop(number)
         return enviar_Mensaje_whatsapp(text_Message(number, cierre))
+
 
 # ----------------------------------------
 # Dispatcher principal
@@ -291,7 +282,7 @@ def administrar_chatbot(text, number, messageId, name):
     time.sleep(random.uniform(0.3, 0.7))
 
     txt = text.strip().lower()
-    if txt in ['hola','buenos días','buenas tardes','buenas noches']:
+    if txt in ['hola', 'buenos días', 'buenas tardes', 'buenas noches']:
         body = (
             f"¡Hola {name}! Soy *AMPARA IA*, tu asistente virtual.\n"
             "¿Qué deseas hacer?\n"
@@ -311,12 +302,14 @@ def administrar_chatbot(text, number, messageId, name):
         )
 
     if text == "main_menu_btn_1":
+        # Inicio del flujo de ansiedad
         return dispatch_flow(number, messageId, "", "ansiedad")
 
     if number in session_states:
         topic = session_states[number]["topic"]
         return dispatch_flow(number, messageId, text, topic)
 
+    # fallback
     return enviar_Mensaje_whatsapp(
         text_Message(number, "No entendí. Escribí 'hola' para volver al menú.")
     )
