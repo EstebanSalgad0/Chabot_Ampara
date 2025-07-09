@@ -4,7 +4,6 @@ import json
 import time
 import random
 import re
-import os
 
 # ----------------------------------------
 # Estado global para sesiones AMPARA
@@ -43,10 +42,9 @@ FLOWS = {
                 ),
                 "options": ["Sí", "No"]
             },
-            {   # Paso 2: guardamos y preguntamos sensación
+            {   # Paso 2: confirmación de envío por correo y preguntar sensación
                 "prompt": (
-                    "Gracias. Guardaré tu descripción para tu terapeuta.\n"
-                    "Luego descarga el archivo y envíalo a tu psicólogo.\n\n"
+                    "Gracias. He enviado tu descripción al correo de tu terapeuta.\n\n"
                     "¿Qué sensación se asemeja más a lo que describiste?"
                 ),
                 "options": [
@@ -210,12 +208,12 @@ def dispatch_flow(number, messageId, text, topic):
     step  = cfg["step"]
     steps = FLOWS[topic]["steps"]
 
-    # Paso 0 → prompt libre
+    # Paso 0 → enviamos prompt libre
     if step == 0:
         cfg["step"] = 1
         return enviar_Mensaje_whatsapp(text_Message(number, steps[0]["prompt"]))
 
-    # Paso 1 → contamos keywords y confirmamos
+    # Paso 1 → contamos keywords y desplegamos Sí/No
     if step == 1:
         cfg["last_input"] = text.lower()
         cnt = sum(
@@ -227,7 +225,7 @@ def dispatch_flow(number, messageId, text, topic):
             return enviar_Mensaje_whatsapp(text_Message(
                 number,
                 "No detecté síntomas claros de ansiedad.\n"
-                "Podés describir más o consultar a un profesional."
+                "Podés describir más o consultar un profesional."
             ))
         cfg["step"] = 2
         return enviar_Mensaje_whatsapp(
@@ -241,14 +239,12 @@ def dispatch_flow(number, messageId, text, topic):
             )
         )
 
-    # Paso 2 → “Sí” o “No”
+    # Paso 2 → si “No”, terminamos; si “Sí”, desplegamos lista
     if step == 2:
         if text.endswith("_btn_2"):  # “No”
             session_states.pop(number)
             return enviar_Mensaje_whatsapp(text_Message(number, "¡Gracias por usar AMPARA!"))
-        # “Sí”: guardo descripción y muestro lista
-        with open(f"/mnt/data/{number}_{topic}.txt", "w", encoding="utf-8") as f:
-            f.write(cfg["last_input"])
+        # “Sí”: avanzamos a lista de sensaciones
         cfg["step"] = 3
         return enviar_Mensaje_whatsapp(
             listReply_Message(
@@ -261,9 +257,9 @@ def dispatch_flow(number, messageId, text, topic):
             )
         )
 
-    # Paso 3 → entrega contenido y cierre
+    # Paso 3 → recibimos selección y entregamos contenido + cierre
     if step == 3:
-        # recibimos e.g. "ansiedad_sens_row_2"
+        # “ansiedad_sens_row_X”
         idx = int(text.split("_")[-1]) - 1
         sel = steps[2]["options"][idx]
         cont = steps[3]["content_fn"](sel)
@@ -271,7 +267,6 @@ def dispatch_flow(number, messageId, text, topic):
         cierre = steps[4]["prompt"]
         session_states.pop(number)
         return enviar_Mensaje_whatsapp(text_Message(number, cierre))
-
 
 # ----------------------------------------
 # Dispatcher principal
@@ -282,6 +277,7 @@ def administrar_chatbot(text, number, messageId, name):
     time.sleep(random.uniform(0.3, 0.7))
 
     txt = text.strip().lower()
+    # Saludo y menú inicial
     if txt in ['hola', 'buenos días', 'buenas tardes', 'buenas noches']:
         body = (
             f"¡Hola {name}! Soy *AMPARA IA*, tu asistente virtual.\n"
@@ -301,15 +297,16 @@ def administrar_chatbot(text, number, messageId, name):
             )
         )
 
+    # Si el usuario pulsa “Psicoeducación Interactiva”
     if text == "main_menu_btn_1":
-        # Inicio del flujo de ansiedad
         return dispatch_flow(number, messageId, "", "ansiedad")
 
+    # Si hay flujo en curso, delegamos
     if number in session_states:
         topic = session_states[number]["topic"]
         return dispatch_flow(number, messageId, text, topic)
 
-    # fallback
+    # Fallback genérico
     return enviar_Mensaje_whatsapp(
         text_Message(number, "No entendí. Escribí 'hola' para volver al menú.")
     )
