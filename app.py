@@ -38,17 +38,18 @@ def recibir_mensaje():
         messageId = message['id']
         name      = value['contacts'][0]['profile']['name']
 
-        # EXTRAER EL ID DE BOTÓN O LISTA SI ES MENSAJE INTERACTIVO
-        if message.get('type') == 'interactive':
-            interactive = message['interactive']
-            if interactive['type'] == 'button_reply':
-                text = interactive['button_reply']['id']
-            elif interactive['type'] == 'list_reply':
-                text = interactive['list_reply']['id']
+        # --- EXTRAER SI VIENE interactive ---
+        if 'interactive' in message:
+            inter = message['interactive']
+            if inter['type'] == 'button_reply':
+                text = inter['button_reply']['id']
+            elif inter['type'] == 'list_reply':
+                text = inter['list_reply']['id']
             else:
                 text = services.obtener_Mensaje_whatsapp(message)
         else:
             text = services.obtener_Mensaje_whatsapp(message)
+        # --------------------------------------
 
         print(f"📨 Mensaje de {number} ({name}): {text}")
 
