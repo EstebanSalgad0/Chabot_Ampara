@@ -42,7 +42,7 @@ FLOWS = {
                 ),
                 "options": ["Sí", "No"]
             },
-            {   # Paso 2: confirmación de envío por correo y preguntar sensación
+            {   # Paso 2: confirmar envío por correo y preguntar sensación
                 "prompt": (
                     "Gracias. He enviado tu descripción al correo de tu terapeuta.\n\n"
                     "¿Qué sensación se asemeja más a lo que describiste?"
@@ -57,23 +57,40 @@ FLOWS = {
             },
             {   # Paso 3: entregar contenido
                 "content_fn": lambda choice: {
-                    "Presión en el pecho":
-                        "Respuesta fisiológica al estrés y cómo reducirla.\n[Audio 4-7-8 + infografía]",
-                    "Pensamiento catastrófico":
-                        "Ejercicio guiado y rueda del control.\n[Cápsula educativa]",
-                    "Alteraciones del sueño":
-                        "Higiene del sueño + ejercicios.\n[Audio relajación]",
-                    "Evitación por miedo":
-                        "Exposición gradual.\n[Guía descargable]",
-                    "Agotamiento mental":
-                        "Mindfulness y autocuidado.\n[Frases + audio]"
-                }.get(choice, "Aquí tenés información sobre ese tema.")
+                    "Presión en el pecho": (
+                        "📌 *Tipo de recurso:* Audio + Infografía\n"
+                        "Respuesta fisiológica al estrés y cómo reducirla.\n"
+                        "🔔 He enviado este recurso a tu correo."
+                    ),
+                    "Pensamiento catastrófico": (
+                        "📌 *Tipo de recurso:* Ejercicio guiado + Cápsula\n"
+                        "Ejercicio guiado y rueda del control.\n"
+                        "🔔 He enviado este recurso a tu correo."
+                    ),
+                    "Alteraciones del sueño": (
+                        "📌 *Tipo de recurso:* Audio de relajación\n"
+                        "Higiene del sueño + ejercicios.\n"
+                        "🔔 He enviado este recurso a tu correo."
+                    ),
+                    "Evitación por miedo": (
+                        "📌 *Tipo de recurso:* Guía descargable\n"
+                        "Exposición gradual.\n"
+                        "🔔 He enviado este recurso a tu correo."
+                    ),
+                    "Agotamiento mental": (
+                        "📌 *Tipo de recurso:* Frases + Audio\n"
+                        "Mindfulness y autocuidado.\n"
+                        "🔔 He enviado este recurso a tu correo."
+                    )
+                }.get(choice, "Aquí tenés información sobre ese tema.\n🔔 He enviado esto a tu correo.")
             },
-            {   # Paso 4: cierre
+            {   # Paso 4: cierre ampliado
                 "prompt": (
-                    "✅ *Cierre:*\n"
-                    "Estos recursos pueden ayudarte día a día.\n"
-                    "¿Querés un recordatorio con esta cápsula?"
+                    "❤️ *Despedida:*\n"
+                    "Gracias por usar AMPARA IA. Recuerda que lo que practiques aquí "
+                    "puede acompañarte entre sesiones y fortalecer tu proceso terapéutico. "
+                    "Si en algún momento necesitás más apoyo o tienes dudas, tu terapeuta "
+                    "está disponible para ayudarte. ¡Cuídate y hasta la próxima!"
                 )
             }
         ]
@@ -259,7 +276,6 @@ def dispatch_flow(number, messageId, text, topic):
 
     # Paso 3 → recibimos selección y entregamos contenido + cierre
     if step == 3:
-        # “ansiedad_sens_row_X”
         idx = int(text.split("_")[-1]) - 1
         sel = steps[2]["options"][idx]
         cont = steps[3]["content_fn"](sel)
