@@ -60,36 +60,46 @@ FLOWS = {
                     "Presión en el pecho": (
                         "📌 *Tipo de recurso:* Audio + Infografía\n"
                         "Respuesta fisiológica al estrés y cómo reducirla.\n"
-                        "🔔 He enviado este recurso a tu correo."
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Basado en tu sensación, seguir estos consejos puede ayudarte "
+                        "a reducir la tensión corporal y promover la relajación."
                     ),
                     "Pensamiento catastrófico": (
                         "📌 *Tipo de recurso:* Ejercicio guiado + Cápsula\n"
                         "Ejercicio guiado y rueda del control.\n"
-                        "🔔 He enviado este recurso a tu correo."
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Practicar este ejercicio te ayudará a cuestionar y equilibrar tus pensamientos."
                     ),
                     "Alteraciones del sueño": (
                         "📌 *Tipo de recurso:* Audio de relajación\n"
                         "Higiene del sueño + ejercicios.\n"
-                        "🔔 He enviado este recurso a tu correo."
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Utilizar este audio antes de dormir puede mejorar la calidad de tu descanso."
                     ),
                     "Evitación por miedo": (
                         "📌 *Tipo de recurso:* Guía descargable\n"
                         "Exposición gradual.\n"
-                        "🔔 He enviado este recurso a tu correo."
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Seguir estos pasos te permitirá enfrentar tus miedos de forma progresiva."
                     ),
                     "Agotamiento mental": (
                         "📌 *Tipo de recurso:* Frases + Audio\n"
                         "Mindfulness y autocuidado.\n"
-                        "🔔 He enviado este recurso a tu correo."
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Tomar pequeñas pausas y practicar mindfulness puede recargar tu energía."
                     )
-                }.get(choice, "Aquí tenés información sobre ese tema.\n🔔 He enviado esto a tu correo.")
+                }.get(choice,
+                    "Aquí tenés información sobre ese tema.\n"
+                    "🔔 He enviado esto a tu correo.\n\n"
+                    "👉 Implementar estas recomendaciones puede ayudarte a manejar mejor tu estado."
+                )
             },
             {   # Paso 4: cierre ampliado
                 "prompt": (
                     "❤️ *Despedida:*\n"
                     "Gracias por usar AMPARA IA. Recuerda que lo que practiques aquí "
                     "puede acompañarte entre sesiones y fortalecer tu proceso terapéutico. "
-                    "Si en algún momento necesitás más apoyo o tienes dudas, tu terapeuta "
+                    "Si en algún momento necesitás más apoyo o tenés dudas, tu terapeuta "
                     "está disponible para ayudarte. ¡Cuídate y hasta la próxima!"
                 )
             }
@@ -215,7 +225,7 @@ def replyReaction_Message(number, mid, emoji):
 
 # ----------------------------------------
 # Dispatcher de flujos
-# ----------------------------------------
+# ----------------------------------------  
 def dispatch_flow(number, messageId, text, topic):
     cfg = session_states.get(number)
     if not cfg:
@@ -261,7 +271,6 @@ def dispatch_flow(number, messageId, text, topic):
         if text.endswith("_btn_2"):  # “No”
             session_states.pop(number)
             return enviar_Mensaje_whatsapp(text_Message(number, "¡Gracias por usar AMPARA!"))
-        # “Sí”: avanzamos a lista de sensaciones
         cfg["step"] = 3
         return enviar_Mensaje_whatsapp(
             listReply_Message(
@@ -286,7 +295,7 @@ def dispatch_flow(number, messageId, text, topic):
 
 # ----------------------------------------
 # Dispatcher principal
-# ----------------------------------------
+# ----------------------------------------  
 def administrar_chatbot(text, number, messageId, name):
     enviar_Mensaje_whatsapp(markRead_Message(messageId))
     enviar_Mensaje_whatsapp(replyReaction_Message(number, messageId, "🧠"))
