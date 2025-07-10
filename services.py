@@ -61,40 +61,44 @@ FLOWS = {
                         "📌 *Tipo de recurso:* Audio + Infografía\n"
                         "Respuesta fisiológica al estrés y cómo reducirla.\n"
                         "🔔 He enviado este recurso a tu correo.\n\n"
-                        "👉 Basado en tu sensación, seguir estos consejos puede ayudarte "
-                        "a reducir la tensión corporal y promover la relajación."
+                        "👉 Basado en tu sensación, estos consejos pueden ayudarte "
+                        "a reducir la tensión y fomentar la relajación."
                     ),
                     "Pensamiento catastrófico": (
                         "📌 *Tipo de recurso:* Ejercicio guiado + Cápsula\n"
-                        "Ejercicio guiado y rueda del control.\n"
+                        "Ejercicio sobre rueda del control.\n"
                         "🔔 He enviado este recurso a tu correo.\n\n"
-                        "👉 Practicar este ejercicio te ayudará a cuestionar y equilibrar tus pensamientos."
+                        "👉 Practicarlo te ayudará a cuestionar y equilibrar tus pensamientos."
                     ),
                     "Alteraciones del sueño": (
                         "📌 *Tipo de recurso:* Audio de relajación\n"
-                        "Higiene del sueño + ejercicios.\n"
+                        "Higiene del sueño y ejercicios.\n"
                         "🔔 He enviado este recurso a tu correo.\n\n"
-                        "👉 Utilizar este audio antes de dormir puede mejorar la calidad de tu descanso."
+                        "👉 Usar este audio antes de dormir puede mejorar tu descanso."
                     ),
                     "Evitación por miedo": (
                         "📌 *Tipo de recurso:* Guía descargable\n"
                         "Exposición gradual.\n"
                         "🔔 He enviado este recurso a tu correo.\n\n"
-                        "👉 Seguir estos pasos te permitirá enfrentar tus miedos de forma progresiva."
+                        "👉 Seguir esta guía te permitirá enfrentar tus miedos paso a paso."
                     ),
                     "Agotamiento mental": (
                         "📌 *Tipo de recurso:* Frases + Audio\n"
                         "Mindfulness y autocuidado.\n"
                         "🔔 He enviado este recurso a tu correo.\n\n"
-                        "👉 Tomar pequeñas pausas y practicar mindfulness puede recargar tu energía."
+                        "👉 Pequeñas pausas y prácticas de mindfulness pueden recargar tu energía."
                     )
                 }.get(choice,
                     "Aquí tenés información sobre ese tema.\n"
                     "🔔 He enviado esto a tu correo.\n\n"
-                    "👉 Implementar estas recomendaciones puede ayudarte a manejar mejor tu estado."
+                    "👉 Implementar estas recomendaciones puede ayudarte."
                 )
             },
-            {   # Paso 4: cierre ampliado
+            {   # Paso 4: ¿Necesitás más ayuda?
+                "prompt": "¿Necesitás más ayuda?",
+                "options": ["Sí", "No"]
+            },
+            {   # Paso 5: despedida extendida
                 "prompt": (
                     "❤️ *Despedida:*\n"
                     "Gracias por usar AMPARA IA. Recuerda que lo que practiques aquí "
@@ -161,75 +165,45 @@ def text_Message(number, body):
     })
 
 def buttonReply_Message(number, options, body, footer, sedd, messageId):
-    buttons = []
-    for i, opt in enumerate(options):
-        title = opt if len(opt) <= 20 else opt[:20]
-        buttons.append({
-            "type": "reply",
-            "reply": {"id": f"{sedd}_btn_{i+1}", "title": title}
-        })
+    buttons = [
+        {"type":"reply","reply":{"id":f"{sedd}_btn_{i+1}","title":opt if len(opt)<=20 else opt[:20]}}
+        for i,opt in enumerate(options)
+    ]
     return json.dumps({
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": number,
-        "type": "interactive",
-        "interactive": {
-            "type": "button",
-            "body": {"text": body},
-            "footer": {"text": footer},
-            "action": {"buttons": buttons}
+        "messaging_product":"whatsapp","recipient_type":"individual","to":number,
+        "type":"interactive","interactive":{
+            "type":"button","body":{"text":body},"footer":{"text":footer},
+            "action":{"buttons":buttons}
         }
     })
 
 def listReply_Message(number, options, body, footer, sedd, messageId):
-    rows = []
-    for i, opt in enumerate(options):
-        title = opt if len(opt) <= 24 else opt[:24]
-        desc  = ""  if len(opt) <= 24 else opt
-        rows.append({
-            "id": f"{sedd}_row_{i+1}",
-            "title": title,
-            "description": desc
-        })
+    rows = [{"id":f"{sedd}_row_{i+1}","title":opt if len(opt)<=24 else opt[:24],"description":""}
+            for i,opt in enumerate(options)]
     return json.dumps({
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": number,
-        "type": "interactive",
-        "interactive": {
-            "type": "list",
-            "body":    {"text": body},
-            "footer":  {"text": footer},
-            "action":  {
-                "button": "Seleccionar",
-                "sections": [{"title": footer, "rows": rows}]
-            }
+        "messaging_product":"whatsapp","recipient_type":"individual","to":number,
+        "type":"interactive","interactive":{
+            "type":"list","body":{"text":body},"footer":{"text":footer},
+            "action":{"button":"Seleccionar","sections":[{"title":footer,"rows":rows}]}
         }
     })
 
 def markRead_Message(mid):
-    return json.dumps({
-        "messaging_product": "whatsapp",
-        "status": "read",
-        "message_id": mid
-    })
+    return json.dumps({"messaging_product":"whatsapp","status":"read","message_id":mid})
 
 def replyReaction_Message(number, mid, emoji):
     return json.dumps({
-        "messaging_product": "whatsapp",
-        "recipient_type": "individual",
-        "to": number,
-        "type": "reaction",
-        "reaction": {"message_id": mid, "emoji": emoji}
+        "messaging_product":"whatsapp","recipient_type":"individual",
+        "to":number,"type":"reaction","reaction":{"message_id":mid,"emoji":emoji}
     })
 
 # ----------------------------------------
 # Dispatcher de flujos
-# ----------------------------------------  
+# ----------------------------------------
 def dispatch_flow(number, messageId, text, topic):
     cfg = session_states.get(number)
     if not cfg:
-        session_states[number] = {"topic": topic, "step": 0}
+        session_states[number] = {"topic":topic,"step":0}
         cfg = session_states[number]
 
     step  = cfg["step"]
@@ -240,62 +214,67 @@ def dispatch_flow(number, messageId, text, topic):
         cfg["step"] = 1
         return enviar_Mensaje_whatsapp(text_Message(number, steps[0]["prompt"]))
 
-    # Paso 1 → contamos keywords y desplegamos Sí/No
+    # Paso 1 → keywords y Sí/No
     if step == 1:
         cfg["last_input"] = text.lower()
-        cnt = sum(
-            bool(re.search(rf"\b{re.escape(kw)}\b", cfg["last_input"], re.IGNORECASE))
-            for kw in TOPIC_KEYWORDS[topic]
-        )
+        cnt = sum(bool(re.search(rf"\b{re.escape(kw)}\b", cfg["last_input"], re.IGNORECASE))
+                  for kw in TOPIC_KEYWORDS[topic])
         if cnt < 1:
             session_states.pop(number)
             return enviar_Mensaje_whatsapp(text_Message(
                 number,
-                "No detecté síntomas claros de ansiedad.\n"
-                "Podés describir más o consultar un profesional."
+                "No detecté síntomas claros de ansiedad.\nPodés describir más o consultar un profesional."
             ))
         cfg["step"] = 2
         return enviar_Mensaje_whatsapp(
-            buttonReply_Message(
-                number,
-                steps[1]["options"],
-                steps[1]["prompt"],
-                topic.capitalize(),
-                f"{topic}_confirm",
-                messageId
-            )
+            buttonReply_Message(number, steps[1]["options"], steps[1]["prompt"],
+                                topic.capitalize(), f"{topic}_confirm", messageId)
         )
 
-    # Paso 2 → si “No”, terminamos; si “Sí”, desplegamos lista
+    # Paso 2 → “No” termina, “Sí” avanza a lista
     if step == 2:
-        if text.endswith("_btn_2"):  # “No”
+        if text.endswith("_btn_2"):
             session_states.pop(number)
             return enviar_Mensaje_whatsapp(text_Message(number, "¡Gracias por usar AMPARA!"))
         cfg["step"] = 3
         return enviar_Mensaje_whatsapp(
-            listReply_Message(
-                number,
-                steps[2]["options"],
-                steps[2]["prompt"],
-                topic.capitalize(),
-                f"{topic}_sens",
-                messageId
-            )
+            listReply_Message(number, steps[2]["options"], steps[2]["prompt"],
+                              topic.capitalize(), f"{topic}_sens", messageId)
         )
 
-    # Paso 3 → recibimos selección y entregamos contenido + cierre
+    # Paso 3 → entrega contenido y preguntamos más ayuda
     if step == 3:
         idx = int(text.split("_")[-1]) - 1
         sel = steps[2]["options"][idx]
         cont = steps[3]["content_fn"](sel)
         enviar_Mensaje_whatsapp(text_Message(number, cont))
-        cierre = steps[4]["prompt"]
+        cfg["step"] = 4
+        return enviar_Mensaje_whatsapp(
+            buttonReply_Message(number, ["Sí","No"], "¿Necesitás más ayuda?", "AMPARA IA",
+                                f"{topic}_more", messageId)
+        )
+
+    # Paso 4 → si “Sí”, al menú; si “No”, despedida
+    if step == 4:
+        if text.endswith("_btn_1"):
+            session_states.pop(number)
+            menu = (
+                "¿Qué deseas hacer?\n"
+                "1. Psicoeducación Interactiva\n"
+                "2. Informe al Terapeuta\n"
+                "3. Recordatorios Terapéuticos"
+            )
+            return enviar_Mensaje_whatsapp(
+                buttonReply_Message(number, MICROSERVICES, menu, "AMPARA IA",
+                                    "main_menu", messageId)
+            )
+        # “No”
         session_states.pop(number)
-        return enviar_Mensaje_whatsapp(text_Message(number, cierre))
+        return enviar_Mensaje_whatsapp(text_Message(number, steps[5]["prompt"]))
 
 # ----------------------------------------
 # Dispatcher principal
-# ----------------------------------------  
+# ----------------------------------------
 def administrar_chatbot(text, number, messageId, name):
     enviar_Mensaje_whatsapp(markRead_Message(messageId))
     enviar_Mensaje_whatsapp(replyReaction_Message(number, messageId, "🧠"))
@@ -303,7 +282,7 @@ def administrar_chatbot(text, number, messageId, name):
 
     txt = text.strip().lower()
     # Saludo y menú inicial
-    if txt in ['hola', 'buenos días', 'buenas tardes', 'buenas noches']:
+    if txt in ['hola','buenos días','buenas tardes','buenas noches']:
         body = (
             f"¡Hola {name}! Soy *AMPARA IA*, tu asistente virtual.\n"
             "¿Qué deseas hacer?\n"
@@ -312,26 +291,17 @@ def administrar_chatbot(text, number, messageId, name):
             "3. Recordatorios Terapéuticos"
         )
         return enviar_Mensaje_whatsapp(
-            buttonReply_Message(
-                number,
-                MICROSERVICES,
-                body,
-                "AMPARA IA",
-                "main_menu",
-                messageId
-            )
+            buttonReply_Message(number, MICROSERVICES, body, "AMPARA IA",
+                                "main_menu", messageId)
         )
 
-    # Si el usuario pulsa “Psicoeducación Interactiva”
     if text == "main_menu_btn_1":
         return dispatch_flow(number, messageId, "", "ansiedad")
 
-    # Si hay flujo en curso, delegamos
     if number in session_states:
         topic = session_states[number]["topic"]
         return dispatch_flow(number, messageId, text, topic)
 
-    # Fallback genérico
     return enviar_Mensaje_whatsapp(
         text_Message(number, "No entendí. Escribí 'hola' para volver al menú.")
     )
