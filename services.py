@@ -19,7 +19,11 @@ TOPIC_KEYWORDS = {
         "taquicardia", "tensión", "opresión",
         "sueño", "evitación", "miedo", "agotamiento"
     ],
-    # Otros topics…
+    "depresion": [
+        "tristeza", "anhedonia", "desmotivación",
+        "baja energía", "apatía", "irritabilidad",
+        "llanto", "aislamiento", "fatiga", "sentirse inútil"
+    ]
 }
 
 # ----------------------------------------
@@ -87,6 +91,88 @@ FLOWS = {
                         "Mindfulness y autocuidado.\n"
                         "🔔 He enviado este recurso a tu correo.\n\n"
                         "👉 Pequeñas pausas y prácticas de mindfulness pueden recargar tu energía."
+                    )
+                }.get(choice,
+                    "Aquí tenés información sobre ese tema.\n"
+                    "🔔 He enviado esto a tu correo.\n\n"
+                    "👉 Implementar estas recomendaciones puede ayudarte."
+                )
+            },
+            {   # Paso 4: ¿Necesitás más ayuda?
+                "prompt": "¿Necesitás más ayuda?",
+                "options": ["Sí", "No"]
+            },
+            {   # Paso 5: despedida extendida
+                "prompt": (
+                    "❤️ *Despedida:*\n"
+                    "Gracias por usar AMPARA IA. Recuerda que lo que practiques aquí "
+                    "puede acompañarte entre sesiones y fortalecer tu proceso terapéutico. "
+                    "Si en algún momento necesitás más apoyo o tenés dudas, tu terapeuta "
+                    "está disponible para ayudarte. ¡Cuídate y hasta la próxima!"
+                )
+            }
+        ]
+    },
+    "depresion": {
+        "steps": [
+            {   # Paso 0: pedir descripción libre (mismo que ansiedad)
+                "prompt": (
+                    "🟢 *Describí los síntomas o sensaciones* que estás experimentando.\n"
+                    "(Por ejemplo: “No tengo ganas de nada”, “Me siento muy triste”, etc.)"
+                )
+            },
+            {   # Paso 1: confirmación detección
+                "prompt": (
+                    "🌿 *Detección de depresión*\n\n"
+                    "Lo que describiste coincide con patrones de *depresión*. "
+                    "¿Querés revisar contenidos psicoeducativos sobre depresión?"
+                ),
+                "options": ["Sí", "No"]
+            },
+            {   # Paso 2: confirmar envío por correo y preguntar sensación
+                "prompt": (
+                    "Gracias. He enviado tu descripción al correo de tu terapeuta.\n\n"
+                    "¿Qué sensación se asemeja más a lo que describiste?"
+                ),
+                "options": [
+                    "Pérdida de interés",
+                    "Tristeza profunda",
+                    "Fatiga constante",
+                    "Pensamientos negativos",
+                    "Aislamiento social"
+                ]
+            },
+            {   # Paso 3: entregar contenido
+                "content_fn": lambda choice: {
+                    "Pérdida de interés": (
+                        "📌 *Tipo de recurso:* Audio + Infografía\n"
+                        "Actividad de planificación de placer.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Realizar pequeñas actividades agradables puede mejorar tu ánimo."
+                    ),
+                    "Tristeza profunda": (
+                        "📌 *Tipo de recurso:* Ejercicio guiado + Cápsula\n"
+                        "Técnicas de regulación emocional.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Practicarlo te ayudará a procesar emociones difíciles."
+                    ),
+                    "Fatiga constante": (
+                        "📌 *Tipo de recurso:* Audio de relajación\n"
+                        "Ejercicios de activación conductual.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Incorporar pequeñas pausas activas puede reducir la sensación de agotamiento."
+                    ),
+                    "Pensamientos negativos": (
+                        "📌 *Tipo de recurso:* Guía descargable\n"
+                        "Reestructuración cognitiva paso a paso.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Seguir esta guía te ayudará a desafiar pensamientos disfuncionales."
+                    ),
+                    "Aislamiento social": (
+                        "📌 *Tipo de recurso:* Frases + Audio\n"
+                        "Estrategias de conexión social.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Practicar estas frases y ejercicios te puede ayudar a abrirte con otros."
                     )
                 }.get(choice,
                     "Aquí tenés información sobre ese tema.\n"
@@ -198,15 +284,31 @@ def replyReaction_Message(number, mid, emoji):
     })
 
 # ----------------------------------------
+# Función de detección de tópico
+# ----------------------------------------
+def detect_topic(text):
+    scores = {}
+    for topic, kws in TOPIC_KEYWORDS.items():
+        scores[topic] = sum(
+            bool(re.search(rf"\b{re.escape(kw)}\b", text, re.IGNORECASE))
+            for kw in kws
+        )
+    # devuelve el topic con más coincidencias (siempre que sea > 0)
+    topic, max_score = max(scores.items(), key=lambda x: x[1])
+    return topic if max_score > 0 else None
+
+# ----------------------------------------
 # Dispatcher de flujos
 # ----------------------------------------
 def dispatch_flow(number, messageId, text, topic):
     cfg = session_states.get(number)
     if not cfg:
-        session_states[number] = {"topic":topic,"step":0}
+        # iniciamos conversation con el tópico por defecto (se re-asignará si hay otro match)
+        session_states[number] = {"topic": topic, "step": 0}
         cfg = session_states[number]
 
     step  = cfg["step"]
+    topic = cfg["topic"]
     steps = FLOWS[topic]["steps"]
 
     # Paso 0 → enviamos prompt libre
@@ -214,44 +316,62 @@ def dispatch_flow(number, messageId, text, topic):
         cfg["step"] = 1
         return enviar_Mensaje_whatsapp(text_Message(number, steps[0]["prompt"]))
 
-    # Paso 1 → keywords y Sí/No
+    # Paso 1 → detección dinámica y confirmación Sí/No
     if step == 1:
-        cfg["last_input"] = text.lower()
-        cnt = sum(bool(re.search(rf"\b{re.escape(kw)}\b", cfg["last_input"], re.IGNORECASE))
-                  for kw in TOPIC_KEYWORDS[topic])
-        if cnt < 1:
+        user_text = text.strip()
+        detected = detect_topic(user_text)
+        if not detected:
             session_states.pop(number)
             return enviar_Mensaje_whatsapp(text_Message(
                 number,
-                "No detecté síntomas claros de ansiedad.\nPodés describir más o consultar un profesional."
+                "No detecté síntomas claros de ningún flujo.\nPodés describir más o consultar un profesional."
             ))
-        cfg["step"] = 2
+        # reasignamos el flujo si cambió
+        cfg["topic"] = detected
+        cfg["step"]   = 2
+        step1 = FLOWS[detected]["steps"][1]
         return enviar_Mensaje_whatsapp(
-            buttonReply_Message(number, steps[1]["options"], steps[1]["prompt"],
-                                topic.capitalize(), f"{topic}_confirm", messageId)
+            buttonReply_Message(
+                number,
+                step1["options"],
+                step1["prompt"],
+                detected.capitalize(),
+                f"{detected}_confirm",
+                messageId
+            )
         )
 
-    # Paso 2 → “No” termina, “Sí” avanza a lista
+    # Paso 2 → “No” termina, “Sí” avanza a lista de sensaciones
     if step == 2:
         if text.endswith("_btn_2"):
             session_states.pop(number)
             return enviar_Mensaje_whatsapp(text_Message(number, "¡Gracias por usar AMPARA!"))
         cfg["step"] = 3
+        step2 = FLOWS[topic]["steps"][2]
         return enviar_Mensaje_whatsapp(
-            listReply_Message(number, steps[2]["options"], steps[2]["prompt"],
-                              topic.capitalize(), f"{topic}_sens", messageId)
+            listReply_Message(
+                number,
+                step2["options"],
+                step2["prompt"],
+                topic.capitalize(),
+                f"{topic}_sens",
+                messageId
+            )
         )
 
     # Paso 3 → entrega contenido y preguntamos más ayuda
     if step == 3:
         idx = int(text.split("_")[-1]) - 1
-        sel = steps[2]["options"][idx]
-        cont = steps[3]["content_fn"](sel)
+        sel = FLOWS[topic]["steps"][2]["options"][idx]
+        cont = FLOWS[topic]["steps"][3]["content_fn"](sel)
         enviar_Mensaje_whatsapp(text_Message(number, cont))
         cfg["step"] = 4
         return enviar_Mensaje_whatsapp(
-            buttonReply_Message(number, ["Sí","No"], "¿Necesitás más ayuda?", "AMPARA IA",
-                                f"{topic}_more", messageId)
+            buttonReply_Message(
+                number, ["Sí","No"],
+                "¿Necesitás más ayuda?", "AMPARA IA",
+                f"{topic}_more", messageId
+            )
         )
 
     # Paso 4 → si “Sí”, al menú; si “No”, despedida
@@ -268,9 +388,9 @@ def dispatch_flow(number, messageId, text, topic):
                 buttonReply_Message(number, MICROSERVICES, menu, "AMPARA IA",
                                     "main_menu", messageId)
             )
-        # “No”
         session_states.pop(number)
-        return enviar_Mensaje_whatsapp(text_Message(number, steps[5]["prompt"]))
+        despedida = FLOWS[topic]["steps"][-1]["prompt"]
+        return enviar_Mensaje_whatsapp(text_Message(number, despedida))
 
 # ----------------------------------------
 # Dispatcher principal
@@ -295,13 +415,16 @@ def administrar_chatbot(text, number, messageId, name):
                                 "main_menu", messageId)
         )
 
+    # Inicia Psicoeducación Interactiva
     if text == "main_menu_btn_1":
         return dispatch_flow(number, messageId, "", "ansiedad")
 
+    # Si ya estamos en un flujo, delegamos
     if number in session_states:
         topic = session_states[number]["topic"]
         return dispatch_flow(number, messageId, text, topic)
 
+    # Cualquier otro input
     return enviar_Mensaje_whatsapp(
         text_Message(number, "No entendí. Escribí 'hola' para volver al menú.")
     )
