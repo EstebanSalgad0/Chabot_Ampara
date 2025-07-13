@@ -148,6 +148,7 @@ FLOWS = {
             }
         ]
     },
+
     "depresion": {
         "steps": [
             {   # Paso 0: pedir descripción libre
@@ -230,6 +231,7 @@ FLOWS = {
             }
         ]
     },
+
     "tea": {
         "steps": [
             {   # Paso 0: pedir descripción libre
@@ -248,55 +250,55 @@ FLOWS = {
                 ),
                 "options": ["Sí", "No"]
             },
-            {   # Paso 2: envío y elección de tema
+            {   # Paso 2: confirmar envío y elegir sensación/comportamiento
                 "prompt": (
                     "Gracias. He enviado tu descripción al correo de tu terapeuta.\n\n"
-                    "¿Qué tema te gustaría explorar?"
+                    "¿Qué aspecto se asemeja más a lo que describiste?"
                 ),
                 "options": [
-                    "¿Qué es el espectro autista y por qué es tan diverso?",
-                    "Procesamiento sensorial: luces, sonidos, texturas",
-                    "Anticipación de rutinas y apoyos visuales",
-                    "Comunicación respetuosa y sin presión",
-                    "Cómo explicar el TEA a otros desde una mirada inclusiva"
+                    "Incomodidad con cambios de rutina",
+                    "Repetición de frases (ecolalia)",
+                    "Sensibilidad a ruidos o texturas",
+                    "Dificultad en interacción social",
+                    "Intereses o conductas repetitivas"
                 ]
             },
             {   # Paso 3: entregar contenido según elección
                 "content_fn": lambda choice: {
-                    "¿Qué es el espectro autista y por qué es tan diverso?": (
-                        "📌 *Tipo de recurso:* Video corto + Documento explicativo\n"
-                        "Explicación sobre neurodiversidad y diversidad dentro del TEA.\n"
-                        "🔔 Recurso enviado a tu correo.\n"
-                        "👉 Conocer esta base te ayudará a comprender mejor."
-                    ),
-                    "Procesamiento sensorial: luces, sonidos, texturas": (
-                        "📌 *Tipo de recurso:* Infografía + Checklist sensorial\n"
-                        "Perfil de hipersensibilidad/hiposensibilidad y cómo adaptar el entorno.\n"
-                        "🔔 Recurso enviado a tu correo.\n"
-                        "👉 Útil para ajustar estímulos en casa o en el colegio."
-                    ),
-                    "Anticipación de rutinas y apoyos visuales": (
+                    "Incomodidad con cambios de rutina": (
                         "📌 *Tipo de recurso:* Calendario pictográfico editable\n"
-                        "Cómo usar apoyos visuales para reducir la ansiedad por cambios.\n"
-                        "🔔 Recurso enviado a tu correo.\n"
-                        "👉 Planificar con anticipación genera seguridad."
+                        "Cómo usar apoyos visuales para anticipar y estructurar cambios.\n"
+                        "🔔 Enviado a tu correo.\n\n"
+                        "👉 Planificar por adelantado reduce la ansiedad."
                     ),
-                    "Comunicación respetuosa y sin presión": (
-                        "📌 *Tipo de recurso:* Guía básica + ejemplos\n"
-                        "Estrategias de comunicación alternativa y escucha activa.\n"
-                        "🔔 Recurso enviado a tu correo.\n"
-                        "👉 Facilita la interacción sin forzar respuestas."
+                    "Repetición de frases (ecolalia)": (
+                        "📌 *Tipo de recurso:* Guía práctica + ejemplos\n"
+                        "Estrategias para canalizar la ecolalia hacia la comunicación funcional.\n"
+                        "🔔 Enviado a tu correo.\n\n"
+                        "👉 Refuerzo positivo y modelado apoyan el lenguaje."
                     ),
-                    "Cómo explicar el TEA a otros desde una mirada inclusiva": (
-                        "📌 *Tipo de recurso:* Cuento ilustrado + ficha descargable\n"
-                        "Material para sensibilizar a familiares y docentes.\n"
-                        "🔔 Recurso enviado a tu correo.\n"
-                        "👉 Promueve el respeto y la comprensión del TEA."
+                    "Sensibilidad a ruidos o texturas": (
+                        "📌 *Tipo de recurso:* Infografía + checklist sensorial\n"
+                        "Perfil de hipersensibilidad y adaptaciones ambientales.\n"
+                        "🔔 Enviado a tu correo.\n\n"
+                        "👉 Filtrar estímulos molestos mejora el confort."
+                    ),
+                    "Dificultad en interacción social": (
+                        "📌 *Tipo de recurso:* Cápsula educativa + ejercicios\n"
+                        "Técnicas paso a paso para iniciar y mantener interacciones.\n"
+                        "🔔 Enviado a tu correo.\n\n"
+                        "👉 Practicar turnos de habla facilita el juego compartido."
+                    ),
+                    "Intereses o conductas repetitivas": (
+                        "📌 *Tipo de recurso:* Plan de actividades + audio\n"
+                        "Cómo incorporar los intereses en actividades motivadoras.\n"
+                        "🔔 Enviado a tu correo.\n\n"
+                        "👉 Usar los intereses como base para aprender cosas nuevas."
                     )
                 }.get(choice,
                     "Aquí tenés más información sobre ese tema.\n"
-                    "🔔 Recurso enviado a tu correo.\n"
-                    "👉 Implementar estas recomendaciones puede ayudar."
+                    "🔔 Enviado a tu correo.\n\n"
+                    "👉 Implementa estas recomendaciones con tu terapeuta."
                 )
             },
             {   # Paso 4: ¿Necesitás más ayuda?
@@ -313,9 +315,10 @@ FLOWS = {
             }
         ]
     },
+
     "tdah": {
         "steps": [
-            {
+            {   # Paso 0: pedir descripción libre
                 "prompt": (
                     "🟢 *Describí los comportamientos o sensaciones* "
                     "que experimentás o que observás en el contexto de TDAH.\n"
@@ -323,7 +326,7 @@ FLOWS = {
                     "“No paro quieto en clase”, etc.)"
                 )
             },
-            {
+            {   # Paso 1: confirmación detección
                 "prompt": (
                     "🌿 *Detección de TDAH*\n\n"
                     "Lo que describiste coincide con patrones de *TDAH*. "
@@ -331,62 +334,62 @@ FLOWS = {
                 ),
                 "options": ["Sí", "No"]
             },
-            {
+            {   # Paso 2: confirmar envío y elegir síntoma
                 "prompt": (
                     "Gracias. He enviado tu descripción al correo de tu terapeuta.\n\n"
-                    "¿Sobre qué te gustaría aprender hoy?"
+                    "¿Qué síntoma te describiría mejor?"
                 ),
                 "options": [
-                    "¿Qué es el TDAH y cómo funciona el cerebro?",
-                    "Estrategias para organizar tareas y enfocarse",
-                    "Cómo manejar la impulsividad con menos culpa",
-                    "Qué hacer en casa o escuela para ayudar",
-                    "Recursos visuales y rutinas estructuradas"
+                    "Dificultad para concentrarse",
+                    "Inquietud motora o verbal",
+                    "Impulsividad al actuar",
+                    "Olvidos frecuentes",
+                    "Desorganización constante"
                 ]
             },
-            {
+            {   # Paso 3: entregar contenido según elección
                 "content_fn": lambda choice: {
-                    "¿Qué es el TDAH y cómo funciona el cerebro?": (
+                    "Dificultad para concentrarse": (
                         "📌 *Tipo de recurso:* Video breve + infografía\n"
                         "Explicación del funcionamiento atencional en TDAH.\n"
-                        "🔔 Te lo envié al correo.\n"
-                        "👉 Conocer tu cerebro es el primer paso para adaptarte."
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Técnicas de enfoque pueden mejorar la atención."
                     ),
-                    "Estrategias para organizar tareas y enfocarse": (
-                        "📌 *Tipo de recurso:* Checklist + ejemplo diario\n"
-                        "Técnicas de planificación simple y recordatorios visuales.\n"
-                        "🔔 Te lo envié al correo.\n"
-                        "👉 Facilita el seguimiento de tus tareas."
+                    "Inquietud motora o verbal": (
+                        "📌 *Tipo de recurso:* Ficha de pausas activas\n"
+                        "Ejercicios breves para canalizar la energía.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Programar descansos regulares aumenta la calma."
                     ),
-                    "Cómo manejar la impulsividad con menos culpa": (
-                        "📌 *Tipo de recurso:* Guía práctica + audio\n"
-                        "Técnicas de pausa y reflexión antes de actuar.\n"
-                        "🔔 Te lo envié al correo.\n"
-                        "👉 Te ayudará a ganar control sobre impulsos."
+                    "Impulsividad al actuar": (
+                        "📌 *Tipo de recurso:* Guía de reflexión + audio\n"
+                        "Estrategias de pausa antes de responder.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Practicar respiraciones profundas antes de actuar."
                     ),
-                    "Qué hacer en casa o escuela para ayudar": (
-                        "📌 *Tipo de recurso:* Ficha de apoyo escolar\n"
-                        "Sugerencias para docentes y familia.\n"
-                        "🔔 Te lo envié al correo.\n"
-                        "👉 Apoya un entorno más comprensible."
+                    "Olvidos frecuentes": (
+                        "📌 *Tipo de recurso:* Calendario editable + recordatorio sonoro\n"
+                        "Herramientas externas para gestionar tareas.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Recordatorios visuales y audibles refuerzan la memoria."
                     ),
-                    "Recursos visuales y rutinas estructuradas": (
-                        "📌 *Tipo de recurso:* Plantillas editables\n"
-                        "Rutinas visuales y recordatorios sonoros.\n"
-                        "🔔 Te lo envié al correo.\n"
-                        "👉 Refuerza la organización diaria."
+                    "Desorganización constante": (
+                        "📌 *Tipo de recurso:* Plantillas de planificación\n"
+                        "Estructuras simples para organizar el día.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Seguir un esquema diario reduce la dispersión."
                     )
                 }.get(choice,
-                    "Aquí tenés más info sobre eso.\n"
-                    "🔔 Te lo envié al correo.\n"
-                    "👉 Implementa estas ideas paso a paso."
+                    "Aquí tenés más información sobre ese tema.\n"
+                    "🔔 He enviado este recurso a tu correo.\n\n"
+                    "👉 Implementa estas recomendaciones con tu terapeuta."
                 )
             },
-            {
+            {   # Paso 4: ¿Necesitás más ayuda?
                 "prompt": "¿Necesitás más ayuda?",
                 "options": ["Sí", "No"]
             },
-            {
+            {   # Paso 5: despedida
                 "prompt": (
                     "❤️ *Despedida TDAH:*\n"
                     "Recordá que cada paso para convivir con TDAH es valioso. "
@@ -395,16 +398,17 @@ FLOWS = {
             }
         ]
     },
+
     "tlp": {
         "steps": [
-            {
+            {   # Paso 0: pedir descripción libre
                 "prompt": (
                     "🟢 *Describí tus sensaciones o pensamientos* "
                     "relacionados con TLP.\n"
                     "(Por ejemplo: “Me enojo muy rápido”, “Siento miedo al abandono”, etc.)"
                 )
             },
-            {
+            {   # Paso 1: confirmación detección
                 "prompt": (
                     "🌿 *Detección de TLP*\n\n"
                     "Lo que describiste coincide con patrones de *Trastorno Límite de la Personalidad*. "
@@ -412,62 +416,62 @@ FLOWS = {
                 ),
                 "options": ["Sí", "No"]
             },
-            {
+            {   # Paso 2: confirmar envío y elegir experiencia
                 "prompt": (
                     "Gracias. He enviado tu descripción al correo de tu terapeuta.\n\n"
-                    "¿Sobre qué tema te gustaría aprender hoy?"
+                    "¿Qué experiencia se asemeja más a lo que sentís?"
                 ),
                 "options": [
-                    "¿Por qué mis emociones cambian tan rápido?",
-                    "Técnicas para regular la angustia o el enojo",
-                    "Qué hacer cuando temo al abandono",
-                    "Cómo hablar de esto con alguien cercano",
-                    "Estrategias DBT para el día a día"
+                    "Cambios de ánimo muy rápidos",
+                    "Miedo intenso al abandono",
+                    "Ira o enojo desproporcionado",
+                    "Sensación crónica de vacío",
+                    "Relaciones interpersonales inestables"
                 ]
             },
-            {
+            {   # Paso 3: entregar contenido según elección
                 "content_fn": lambda choice: {
-                    "¿Por qué mis emociones cambian tan rápido?": (
-                        "📌 *Tipo de recurso:* Infografía + audio\n"
-                        "Ciclo emocional y su función.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Comprender el ciclo es clave para regularlo."
+                    "Cambios de ánimo muy rápidos": (
+                        "📌 *Tipo de recurso:* Infografía ciclo emocional\n"
+                        "Cómo identificar y anticipar oscilaciones afectivas.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Registro diario ayuda a reconocer patrones."
                     ),
-                    "Técnicas para regular la angustia o el enojo": (
-                        "📌 *Tipo de recurso:* Ejercicio guiado + ficha\n"
-                        "Prácticas de pausa emocional y respiración.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Útil para momentos de alta intensidad."
+                    "Miedo intenso al abandono": (
+                        "📌 *Tipo de recurso:* Cápsula validante + ejercicio de anclaje\n"
+                        "Estrategias para generar seguridad interna.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Recordar recursos de apoyo disminuye la angustia."
                     ),
-                    "Qué hacer cuando temo al abandono": (
-                        "📌 *Tipo de recurso:* Cápsula validante\n"
-                        "Anclajes y ejercicios para el miedo al abandono.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Te ayudará a generar seguridad interna."
+                    "Ira o enojo desproporcionado": (
+                        "📌 *Tipo de recurso:* Ejercicio guiado + audio\n"
+                        "Técnicas de pausa emocional y respiración.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Practicar la contención antes de reaccionar."
                     ),
-                    "Cómo hablar de esto con alguien cercano": (
-                        "📌 *Tipo de recurso:* Guía de comunicación\n"
-                        "Estrategias para expresar necesidades sin conflicto.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Facilita el apoyo de tu entorno."
+                    "Sensación crónica de vacío": (
+                        "📌 *Tipo de recurso:* Guía de reconexión interna\n"
+                        "Ejercicios para encontrar sentido y propósito.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Actividades significativas rellenan el vacío."
                     ),
-                    "Estrategias DBT para el día a día": (
-                        "📌 *Tipo de recurso:* Guía básica + ejemplos\n"
-                        "Herramientas dialéctico-conductuales para regular emociones.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Refuerza tus recursos emocionales."
+                    "Relaciones interpersonales inestables": (
+                        "📌 *Tipo de recurso:* Estrategias DBT para vínculos\n"
+                        "Herramientas de validación y comunicación.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Practicar límites y saber pedir apoyo."
                     )
                 }.get(choice,
-                    "Aquí tenés más info sobre eso.\n"
-                    "🔔 Enviado a tu correo.\n"
-                    "👉 Implementa estas ideas gradualmente."
+                    "Aquí tenés más información sobre ese tema.\n"
+                    "🔔 He enviado este recurso a tu correo.\n\n"
+                    "👉 Implementa estas recomendaciones con tu terapeuta."
                 )
             },
-            {
+            {   # Paso 4: ¿Necesitás más ayuda?
                 "prompt": "¿Necesitás más ayuda?",
                 "options": ["Sí", "No"]
             },
-            {
+            {   # Paso 5: despedida
                 "prompt": (
                     "❤️ *Despedida TLP:*\n"
                     "Aprender a regular emociones intensas es un acto de cuidado profundo. "
@@ -475,10 +479,11 @@ FLOWS = {
                 )
             }
         ]
-    },    
+    },
+
     "tept": {
         "steps": [
-            {
+            {   # Paso 0: pedir descripción libre
                 "prompt": (
                     "🟢 *Describí los recuerdos o sensaciones* relacionadas\n"
                     "con lo que viviste.\n"
@@ -486,7 +491,7 @@ FLOWS = {
                     "“Tengo pesadillas”, etc.)"
                 )
             },
-            {
+            {   # Paso 1: confirmación detección
                 "prompt": (
                     "🌿 *Detección de TEPT*\n\n"
                     "Lo que describiste coincide con patrones de *Estrés Postraumático*. "
@@ -494,62 +499,62 @@ FLOWS = {
                 ),
                 "options": ["Sí", "No"]
             },
-            {
+            {   # Paso 2: confirmar envío y elegir síntoma
                 "prompt": (
                     "Gracias. He enviado tu descripción al correo de tu terapeuta.\n\n"
-                    "¿Sobre qué tema te gustaría aprender?"
+                    "¿Qué síntoma te está afectando más?"
                 ),
                 "options": [
-                    "¿Qué es el trauma y cómo lo vive el cuerpo?",
-                    "¿Por qué tengo recuerdos o reacciones sin querer?",
-                    "Técnicas para sentirme a salvo en el presente",
-                    "Cómo explicarlo sin contar todo lo que pasó",
-                    "Recursos para momentos de crisis o desregulación"
+                    "Recuerdos o flashbacks intrusivos",
+                    "Sobresaltos o hipervigilancia",
+                    "Evitación de lugares o personas",
+                    "Pesadillas recurrentes",
+                    "Sentimiento de culpa o vergüenza"
                 ]
             },
-            {
+            {   # Paso 3: entregar contenido según elección
                 "content_fn": lambda choice: {
-                    "¿Qué es el trauma y cómo lo vive el cuerpo?": (
-                        "📌 *Tipo de recurso:* Video + resumen en lenguaje claro\n"
-                        "Explicación de flashbacks y respuesta fisiológica.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Comprender ayuda a desactivar el miedo."
+                    "Recuerdos o flashbacks intrusivos": (
+                        "📌 *Tipo de recurso:* Video explicativo + resumen claro\n"
+                        "Comprender flashbacks y técnicas de grounding.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Grounding con 5-4-3-2-1 ancla al presente."
                     ),
-                    "¿Por qué tengo recuerdos o reacciones sin querer?": (
-                        "📌 *Tipo de recurso:* Infografía + cápsula sobre anclaje físico\n"
-                        "Mecanismos de recuerdos intrusivos y sobresaltos.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Técnicas de grounding para el aquí y ahora."
+                    "Sobresaltos o hipervigilancia": (
+                        "📌 *Tipo de recurso:* Infografía sistema de alarma\n"
+                        "Cómo reducir la reactividad física.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Prácticas de respiración lenta calman el cuerpo."
                     ),
-                    "Técnicas para sentirme a salvo en el presente": (
-                        "📌 *Tipo de recurso:* Guía práctica + audio de relajación\n"
-                        "Estrategias de anclaje y respiración.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Útil para lidiar con hiperalerta."
+                    "Evitación de lugares o personas": (
+                        "📌 *Tipo de recurso:* Texto validante + alternativas\n"
+                        "Estrategias graduadas para reencontrarte con tus miedos.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Comenzar con exposiciones muy leves y seguras."
                     ),
-                    "Cómo explicarlo sin contar todo lo que pasó": (
-                        "📌 *Tipo de recurso:* Frases modelo + guía de comunicación segura\n"
-                        "Cómo compartir sin retraumatizar.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Facilita que otros entiendan sin detalles."
+                    "Pesadillas recurrentes": (
+                        "📌 *Tipo de recurso:* Rutina nocturna + audio relajante\n"
+                        "Preparar el entorno mental antes de dormir.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Visualizaciones seguras ayudan a calmar la mente."
                     ),
-                    "Recursos para momentos de crisis o desregulación": (
-                        "📌 *Tipo de recurso:* Checklist de autocuidado\n"
-                        "Rutinas de contención y redes de apoyo.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Para usar cuando te sientas activado/a."
+                    "Sentimiento de culpa o vergüenza": (
+                        "📌 *Tipo de recurso:* Guía de autoaceptación\n"
+                        "Ejercicios para soltar la culpa post-trauma.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Escribir una carta de compasión hacia ti mismo/a."
                     )
                 }.get(choice,
-                    "Aquí tenés más información sobre el TEPT.\n"
-                    "🔔 Enviado a tu correo.\n"
+                    "Aquí tenés más información sobre ese tema.\n"
+                    "🔔 He enviado este recurso a tu correo.\n\n"
                     "👉 Implementa estas recomendaciones con tu terapeuta."
                 )
             },
-            {
+            {   # Paso 4: ¿Necesitás más ayuda?
                 "prompt": "¿Necesitás más ayuda?",
                 "options": ["Sí", "No"]
             },
-            {
+            {   # Paso 5: despedida
                 "prompt": (
                     "❤️ *Despedida TEPT:*\n"
                     "Sanar del trauma lleva tiempo y acompañamiento. "
@@ -558,16 +563,17 @@ FLOWS = {
             }
         ]
     },
+
     "suenos": {
         "steps": [
-            {
+            {   # Paso 0: pedir descripción libre
                 "prompt": (
                     "🟢 *Describí tus dificultades para dormir*.\n"
                     "(Por ejemplo: “No puedo conciliar el sueño”,\n"
                     "“Me despierto muchas veces”, etc.)"
                 )
             },
-            {
+            {   # Paso 1: confirmación detección
                 "prompt": (
                     "🌿 *Detección de trastornos del sueño*\n\n"
                     "Lo que describiste coincide con patrones de *trastornos del sueño*. "
@@ -575,62 +581,62 @@ FLOWS = {
                 ),
                 "options": ["Sí", "No"]
             },
-            {
+            {   # Paso 2: confirmar envío y elegir dificultad
                 "prompt": (
                     "Gracias. He enviado tu descripción al correo de tu terapeuta.\n\n"
-                    "¿Qué tema te interesa hoy?"
+                    "¿Cuál de estas dificultades describe mejor tu sueño?"
                 ),
                 "options": [
-                    "¿Cómo funciona el ciclo del sueño y por qué se altera?",
-                    "Estrategias para conciliar el sueño sin frustración",
-                    "Qué hacer cuando me despierto de madrugada",
-                    "Cómo preparar un ambiente propicio para dormir",
-                    "Audios y rutinas para ayudar al descanso"
+                    "No puedo conciliar el sueño",
+                    "Me despierto muchas veces",
+                    "Duermo pero no descanso",
+                    "Pesadillas o sobresaltos nocturnos",
+                    "Pensamientos intrusivos al acostarme"
                 ]
             },
-            {
+            {   # Paso 3: entregar contenido según elección
                 "content_fn": lambda choice: {
-                    "¿Cómo funciona el ciclo del sueño y por qué se altera?": (
-                        "📌 *Tipo de recurso:* Video + explicación sobre ciclo circadiano\n"
-                        "Descripción de fases y su regulación.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Conocer el ciclo ayuda a identificar problemas."
+                    "No puedo conciliar el sueño": (
+                        "📌 *Tipo de recurso:* Infografía higiene del sueño\n"
+                        "Factores clave antes de acostarte.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Evitar pantallas y cafeína mejora la conciliación."
                     ),
-                    "Estrategias para conciliar el sueño sin frustración": (
-                        "📌 *Tipo de recurso:* Infografía + checklist editable\n"
-                        "Técnicas de higiene del sueño.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Útil para preparar la noche."
-                    ),
-                    "Qué hacer cuando me despierto de madrugada": (
+                    "Me despierto muchas veces": (
                         "📌 *Tipo de recurso:* Audio de reinducción\n"
-                        "Ejercicio de reinducción y relajación.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Practícalo para volver a dormir."
+                        "Ejercicios suaves para volver a dormir.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Respiraciones profundas y conteo regresivo."
                     ),
-                    "Cómo preparar un ambiente propicio para dormir": (
-                        "📌 *Tipo de recurso:* Guía básica + ejemplos\n"
-                        "Consejos de luz, sonido y temperatura.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Mejora tu entorno de descanso."
+                    "Duermo pero no descanso": (
+                        "📌 *Tipo de recurso:* Video fases del sueño\n"
+                        "Comprender el ciclo circadiano.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Ajustar rutina de luz y oscuridad."
                     ),
-                    "Audios y rutinas para ayudar al descanso": (
-                        "📌 *Tipo de recurso:* Rutinas nocturnas + audios de relajación\n"
-                        "Protocolos para antes de acostarse.\n"
-                        "🔔 Enviado a tu correo.\n"
-                        "👉 Crea un ritual de descanso efectivo."
+                    "Pesadillas o sobresaltos nocturnos": (
+                        "📌 *Tipo de recurso:* Ejercicio de contención nocturna\n"
+                        "Técnicas de seguridad emocional para la noche.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Usar un objeto de seguridad (peluche, manta)."
+                    ),
+                    "Pensamientos intrusivos al acostarme": (
+                        "📌 *Tipo de recurso:* Audio de atención plena\n"
+                        "Ejercicios de mindfulness antes de dormir.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Centrarte en sensaciones físicas, no en ideas."
                     )
                 }.get(choice,
-                    "Aquí tenés más información sobre el sueño.\n"
-                    "🔔 Enviado a tu correo.\n"
-                    "👉 Implementa estas ideas junto a tu terapeuta."
+                    "Aquí tenés más información sobre ese tema.\n"
+                    "🔔 He enviado este recurso a tu correo.\n"
+                    "👉 Implementa estas recomendaciones con tu terapeuta."
                 )
             },
-            {
+            {   # Paso 4: ¿Necesitás más ayuda?
                 "prompt": "¿Necesitás más ayuda?",
                 "options": ["Sí", "No"]
             },
-            {
+            {   # Paso 5: despedida
                 "prompt": (
                     "❤️ *Despedida Sueños:*\n"
                     "Dormir bien es fundamental para tu bienestar. "
@@ -638,10 +644,11 @@ FLOWS = {
                 )
             }
         ]
-    },    
+    },
+
     "tca": {
         "steps": [
-            {   # Paso 0: descripción libre
+            {   # Paso 0: pedir descripción libre
                 "prompt": (
                     "🟢 *Describí tus pensamientos o comportamientos* "
                     "relacionados con la alimentación.\n"
@@ -658,58 +665,58 @@ FLOWS = {
                 ),
                 "options": ["Sí", "No"]
             },
-            {   # Paso 2: elección de tema
+            {   # Paso 2: confirmar envío y elegir sensación/conducta
                 "prompt": (
                     "Gracias. He enviado tu descripción al correo de tu terapeuta.\n\n"
-                    "¿Qué tema te interesa hoy?"
+                    "¿Qué sensación o conducta refleja mejor tu experiencia?"
                 ),
                 "options": [
-                    "¿Por qué la comida genera tanta culpa o ansiedad?",
-                    "Imagen corporal y presión social",
-                    "Cómo frenar pensamientos dañinos",
-                    "Frases de autocuidado y validación",
-                    "Guía para familiares y cuidadores"
+                    "Miedo a engordar",
+                    "Culpa después de comer",
+                    "Atracones incontrolables",
+                    "Insatisfacción con mi cuerpo",
+                    "Conductas de compensación"
                 ]
             },
-            {   # Paso 3: entregar contenido
+            {   # Paso 3: entregar contenido según elección
                 "content_fn": lambda choice: {
-                    "¿Por qué la comida genera tanta culpa o ansiedad?": (
-                        "📌 *Tipo de recurso:* Infografía + audio de contención\n"
-                        "Ciclo culpa–compensación y cómo interrumpirlo.\n"
-                        "🔔 Enviado a tu correo.\n\n"
-                        "👉 Reconocer el ciclo es el primer paso para cambiarlo."
+                    "Miedo a engordar": (
+                        "📌 *Tipo de recurso:* Infografía ciclo culpa–compensación\n"
+                        "Cómo interrumpir patrones restrictivos.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Reconocer la función de la emoción es clave."
                     ),
-                    "Imagen corporal y presión social": (
+                    "Culpa después de comer": (
+                        "📌 *Tipo de recurso:* Audio de contención emocional\n"
+                        "Técnicas para soltar la culpa post-comida.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Practicar autocompasión tras la comida."
+                    ),
+                    "Atracones incontrolables": (
+                        "📌 *Tipo de recurso:* Diario reflexivo + plan de acción\n"
+                        "Registro de emociones previas al atracón.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Identificar desencadenantes y alternativas."
+                    ),
+                    "Insatisfacción con mi cuerpo": (
                         "📌 *Tipo de recurso:* Ejercicio espejo + frases respetuosas\n"
-                        "Cómo aceptar el cuerpo y cuestionar estándares.\n"
-                        "🔔 Enviado a tu correo.\n\n"
-                        "👉 Practica la autocompasión diariamente."
+                        "Práctica diaria de apreciación corporal.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Reconocer cualidades más allá del físico."
                     ),
-                    "Cómo frenar pensamientos dañinos": (
-                        "📌 *Tipo de recurso:* Gráfico comparativo + diario reflexivo\n"
-                        "Distinción entre hambre emocional y física.\n"
-                        "🔔 Enviado a tu correo.\n\n"
-                        "👉 Registra tus pensamientos antes de actuar."
-                    ),
-                    "Frases de autocuidado y validación": (
-                        "📌 *Tipo de recurso:* Cápsula educativa + carta de autorreconocimiento\n"
-                        "Afirmaciones para romper el silencio.\n"
-                        "🔔 Enviado a tu correo.\n\n"
-                        "👉 Úsalas cuando te sientas vulnerable."
-                    ),
-                    "Guía para familiares y cuidadores": (
-                        "📌 *Tipo de recurso:* Ficha breve + decálogo para cuidadores\n"
-                        "Cómo apoyar sin juzgar.\n"
-                        "🔔 Enviado a tu correo.\n\n"
-                        "👉 Comparte este material con tu red de apoyo."
+                    "Conductas de compensación": (
+                        "📌 *Tipo de recurso:* Guía para familiares y cuidadores\n"
+                        "Cómo apoyar sin promover purgas o ejercicios excesivos.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Establecer límites saludables y comprensión."
                     )
                 }.get(choice,
-                    "Aquí tenés más info sobre TCA.\n"
-                    "🔔 Enviado a tu correo.\n\n"
+                    "Aquí tenés más información sobre ese tema.\n"
+                    "🔔 He enviado este recurso a tu correo.\n"
                     "👉 Implementa estas recomendaciones con tu terapeuta."
                 )
             },
-            {   # Paso 4: más ayuda
+            {   # Paso 4: ¿Necesitás más ayuda?
                 "prompt": "¿Necesitás más ayuda?",
                 "options": ["Sí", "No"]
             },
@@ -725,7 +732,7 @@ FLOWS = {
 
     "toc": {
         "steps": [
-            {   # Paso 0: descripción libre
+            {   # Paso 0: pedir descripción libre
                 "prompt": (
                     "🟢 *Describí tus pensamientos o rituales* relacionados con TOC.\n"
                     "(Por ejemplo: “Reviso todo muchas veces”, "
@@ -741,58 +748,58 @@ FLOWS = {
                 ),
                 "options": ["Sí", "No"]
             },
-            {   # Paso 2: elección de tema
+            {   # Paso 2: confirmar envío y elegir síntoma
                 "prompt": (
                     "Gracias. He enviado tu descripción al correo de tu terapeuta.\n\n"
-                    "¿Qué tema te gustaría explorar?"
+                    "¿Qué síntoma describe mejor tu experiencia?"
                 ),
                 "options": [
-                    "¿Qué son obsesiones y compulsiones?",
-                    "¿Por qué no puedo parar si es irracional?",
-                    "Cómo funciona el ciclo obsesión–ritual",
-                    "Frases para compartir sin vergüenza",
-                    "Prácticas seguras para la ansiedad"
+                    "Pensamientos intrusivos",
+                    "Rituales repetitivos",
+                    "Necesidad de orden",
+                    "Lavado de manos excesivo",
+                    "Revisión constante de objetos"
                 ]
             },
-            {   # Paso 3: entregar contenido
+            {   # Paso 3: entregar contenido según elección
                 "content_fn": lambda choice: {
-                    "¿Qué son obsesiones y compulsiones?": (
+                    "Pensamientos intrusivos": (
                         "📌 *Tipo de recurso:* Cápsula explicativa + ejercicio de distanciamiento\n"
-                        "Diferencia entre pensamiento y acto repetitivo.\n"
-                        "🔔 Enviado a tu correo.\n\n"
-                        "👉 Comprender la distinción es clave."
+                        "Cómo reconocer y desapegarte de los pensamientos.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Técnica de “observador” para separar idea de yo."
                     ),
-                    "¿Por qué no puedo parar si es irracional?": (
-                        "📌 *Tipo de recurso:* Infografía + analogía ilustrada\n"
-                        "Mecanismos del alivio momentáneo y culpa subsecuente.\n"
-                        "🔔 Enviado a tu correo.\n\n"
-                        "👉 Reconocer el ciclo ayuda a romperlo."
+                    "Rituales repetitivos": (
+                        "📌 *Tipo de recurso:* Infografía ciclo compulsión–alivio\n"
+                        "Entender el ciclo y dónde intervenir.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Practicar exposición sin realizar ritual."
                     ),
-                    "Cómo funciona el ciclo obsesión–ritual": (
+                    "Necesidad de orden": (
+                        "📌 *Tipo de recurso:* Analogía ilustrada + pauta\n"
+                        "Cómo flexibilizar expectativas de perfección.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Introducir variaciones mínimas en rutina."
+                    ),
+                    "Lavado de manos excesivo": (
                         "📌 *Tipo de recurso:* Video + hoja de prevención consciente\n"
-                        "Explicación del ciclo ansiedad–ritual–alivio.\n"
-                        "🔔 Enviado a tu correo.\n\n"
-                        "👉 Identifica puntos de intervención."
+                        "Alternativas seguras para la higiene.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Reducir gradualmente la frecuencia."
                     ),
-                    "Frases para compartir sin vergüenza": (
-                        "📌 *Tipo de recurso:* Audio validante + guía de comunicación\n"
-                        "Cómo explicar tu experiencia sin culpa.\n"
-                        "🔔 Enviado a tu correo.\n\n"
-                        "👉 Facilita el apoyo de otros."
-                    ),
-                    "Prácticas seguras para la ansiedad": (
-                        "📌 *Tipo de recurso:* Registro de autoobservación + frases clave\n"
-                        "Técnicas de pausa y mindfulness breve.\n"
-                        "🔔 Enviado a tu correo.\n\n"
-                        "👉 Úsalas en momentos de urgencia."
+                    "Revisión constante de objetos": (
+                        "📌 *Tipo de recurso:* Registro de autoobservación + pistas\n"
+                        "Técnicas de anclaje para detener la comprobación.\n"
+                        "🔔 He enviado este recurso a tu correo.\n\n"
+                        "👉 Marcar límites temporales claros."
                     )
                 }.get(choice,
-                    "Aquí tenés más info sobre TOC.\n"
-                    "🔔 Enviado a tu correo.\n\n"
-                    "👉 Implementa estas ideas con tu terapeuta."
+                    "Aquí tenés más información sobre ese tema.\n"
+                    "🔔 He enviado este recurso a tu correo.\n"
+                    "👉 Implementa estas recomendaciones con tu terapeuta."
                 )
             },
-            {   # Paso 4: más ayuda
+            {   # Paso 4: ¿Necesitás más ayuda?
                 "prompt": "¿Necesitás más ayuda?",
                 "options": ["Sí", "No"]
             },
@@ -806,7 +813,6 @@ FLOWS = {
         ]
     }
 }
-
 
 # ----------------------------------------
 # Menú principal
