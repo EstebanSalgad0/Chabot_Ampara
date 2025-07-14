@@ -10,6 +10,27 @@ import re
 # ----------------------------------------
 session_states = {}
 
+
+# ----------------------------------------
+# Palabras clave para clasificación de riesgo
+# ----------------------------------------
+RISK_KEYWORDS = {
+    "Riesgo alto (suicida)": [
+        "quiero rendirme", "no soporto más", "me quiero matar", "terminar con todo",
+        "no vale la pena vivir", "estoy harto de vivir"
+    ],
+    "Riesgo medio": [
+        "no puedo más", "me siento atrapado", "todo sale mal",
+        "no encuentro salida", "siento que me ahogo", "ansiedad insoportable"
+    ],
+    "Riesgo bajo": [
+        "me siento triste", "estoy agotado", "bajo ánimo",
+        "desmotivado", "cansado emocionalmente", "un poco deprimido"
+    ]
+}
+
+
+
 # ----------------------------------------
 # Keywords para cada flujo
 # ----------------------------------------
@@ -910,19 +931,15 @@ def detect_topic(text):
             bool(re.search(rf"\b{re.escape(kw)}\b", text, re.IGNORECASE))
             for kw in kws
         )
-    # selecciona el tópico con más coincidencias
     topic, max_score = max(scores.items(), key=lambda x: x[1])
-    # sólo devuelve un tópico si hay al menos 2 matches
     return topic if max_score >= 2 else None
 
-
 # ----------------------------------------
-# Dispatcher de flujos
+# Dispatcher de flujos de Psicoeducación
 # ----------------------------------------
 def dispatch_flow(number, messageId, text, topic):
     cfg = session_states.get(number)
     if not cfg:
-        # iniciamos conversation con el tópico por defecto (se re-asignará si hay otro match)
         session_states[number] = {"topic": topic, "step": 0}
         cfg = session_states[number]
 
@@ -930,12 +947,12 @@ def dispatch_flow(number, messageId, text, topic):
     topic = cfg["topic"]
     steps = FLOWS[topic]["steps"]
 
-    # Paso 0 → enviamos prompt libre
+    # Paso 0 → prompt libre
     if step == 0:
         cfg["step"] = 1
         return enviar_Mensaje_whatsapp(text_Message(number, steps[0]["prompt"]))
 
-    # Paso 1 → detección dinámica y confirmación Sí/No
+    # Paso 1 → confirmación detección
     if step == 1:
         user_text = text.strip()
         detected = detect_topic(user_text)
@@ -945,7 +962,6 @@ def dispatch_flow(number, messageId, text, topic):
                 number,
                 "No detecté síntomas claros de ningún flujo.\nPodés describir más o consultar un profesional."
             ))
-        # reasignamos el flujo si cambió
         cfg["topic"] = detected
         cfg["step"]   = 2
         step1 = FLOWS[detected]["steps"][1]
@@ -960,7 +976,7 @@ def dispatch_flow(number, messageId, text, topic):
             )
         )
 
-    # Paso 2 → “No” termina, “Sí” avanza a lista de sensaciones
+    # Paso 2 → “No” termina, “Sí” avanza
     if step == 2:
         if text.endswith("_btn_2"):
             session_states.pop(number)
@@ -978,7 +994,7 @@ def dispatch_flow(number, messageId, text, topic):
             )
         )
 
-    # Paso 3 → entrega contenido y preguntamos más ayuda
+    # Paso 3 → entrega contenido
     if step == 3:
         idx = int(text.split("_")[-1]) - 1
         sel = FLOWS[topic]["steps"][2]["options"][idx]
@@ -993,7 +1009,7 @@ def dispatch_flow(number, messageId, text, topic):
             )
         )
 
-    # Paso 4 → si “Sí”, al menú; si “No”, despedida
+    # Paso 4 → volver al menú o despedida
     if step == 4:
         if text.endswith("_btn_1"):
             session_states.pop(number)
@@ -1010,6 +1026,76 @@ def dispatch_flow(number, messageId, text, topic):
         session_states.pop(number)
         despedida = FLOWS[topic]["steps"][-1]["prompt"]
         return enviar_Mensaje_whatsapp(text_Message(number, despedida))
+
+# ----------------------------------------
+# Dispatcher de Informe al Terapeuta (fragmento con la clasificación actualizada)
+# ----------------------------------------
+def dispatch_informe(number, messageId, text):
+    cfg = session_states.get(number)
+    if not cfg:
+        session_states[number] = {"topic": "informe", "step": 0}
+        cfg = session_states[number]
+
+    step = cfg["step"]
+
+    # Paso 0: pedir motivo de consulta
+    if step == 0:
+        cfg["step"] = 1
+        prompt = (
+            "📝 *Informe al Terapeuta*\n\n"
+            "Por favor, describí el motivo de consulta principal."
+        )
+        return enviar_Mensaje_whatsapp(text_Message(number, prompt))
+
+    # Paso 1: clasificar riesgo y preguntar recordatorio
+    if step == 1:
+        motivo = text.strip()
+        cfg["motivo"] = motivo
+
+        # clasificación por orden de mayor a menor
+        risk = "Sin riesgo detectado"
+        for nivel, kws in RISK_KEYWORDS.items():
+            if any(re.search(rf"\b{re.escape(kw)}\b", motivo, re.IGNORECASE) for kw in kws):
+                risk = nivel
+                break
+        # si no matchea con ninguno, consideramos riesgo bajo
+        if risk == "Sin riesgo detectado":
+            risk = "Riesgo bajo"
+
+        cfg["risk"] = risk
+        cfg["step"] = 2
+
+        prompt = (
+            f"⚠️ *Clasificación de riesgo:* {risk}\n\n"
+            "¿Querés programar un recordatorio diario de ejercicios de respiración a las 09:00?"
+        )
+        return enviar_Mensaje_whatsapp(
+            buttonReply_Message(
+                number,
+                ["Sí", "No"],
+                prompt,
+                "Informe al Terapeuta",
+                "informe_reminder",
+                messageId
+            )
+        )
+
+    # Paso 2: guardar recordatorio y enviar informe final
+    if step == 2:
+        if text.endswith("_btn_1"):
+            cfg["reminder"] = "Programado diario a las 09:00"
+            # aquí podrías crear la automación con automations.create(...)
+        else:
+            cfg["reminder"] = "No programado"
+
+        report = (
+            "📝 *Informe al Terapeuta*\n\n"
+            f"• *Motivo de consulta:* {cfg['motivo']}\n"
+            f"• *Clasificación de riesgo:* {cfg['risk']}\n"
+            f"• *Recordatorio respiración:* {cfg['reminder']}"
+        )
+        session_states.pop(number)
+        return enviar_Mensaje_whatsapp(text_Message(number, report))
 
 # ----------------------------------------
 # Dispatcher principal
@@ -1038,10 +1124,18 @@ def administrar_chatbot(text, number, messageId, name):
     if text == "main_menu_btn_1":
         return dispatch_flow(number, messageId, "", "ansiedad")
 
-    # Si ya estamos en un flujo, delegamos
-    if number in session_states:
+    # Inicia Informe al Terapeuta
+    if text == "main_menu_btn_2":
+        return dispatch_informe(number, messageId, "")
+
+    # Si ya estamos en un flujo de psicoeducación...
+    if number in session_states and session_states[number].get("topic") != "informe":
         topic = session_states[number]["topic"]
         return dispatch_flow(number, messageId, text, topic)
+
+    # Si estamos en informe
+    if number in session_states and session_states[number].get("topic") == "informe":
+        return dispatch_informe(number, messageId, text)
 
     # Cualquier otro input
     return enviar_Mensaje_whatsapp(
