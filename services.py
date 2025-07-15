@@ -1028,7 +1028,7 @@ def dispatch_flow(number, messageId, text, topic):
         return enviar_Mensaje_whatsapp(text_Message(number, despedida))
 
 # ----------------------------------------
-# Dispatcher de Informe al Terapeuta (fragmento con la clasificación actualizada)
+# Dispatcher de Informe al Terapeuta (con programación de hora dinámica)
 # ----------------------------------------
 def dispatch_informe(number, messageId, text):
     cfg = session_states.get(number)
@@ -1047,7 +1047,7 @@ def dispatch_informe(number, messageId, text):
         )
         return enviar_Mensaje_whatsapp(text_Message(number, prompt))
 
-    # Paso 1: clasificar riesgo y preguntar recordatorio
+    # Paso 1: clasificar riesgo y pedir hora de recordatorio
     if step == 1:
         motivo = text.strip()
         cfg["motivo"] = motivo
@@ -1058,44 +1058,101 @@ def dispatch_informe(number, messageId, text):
             if any(re.search(rf"\b{re.escape(kw)}\b", motivo, re.IGNORECASE) for kw in kws):
                 risk = nivel
                 break
-        # si no matchea con ninguno, consideramos riesgo bajo
         if risk == "Sin riesgo detectado":
             risk = "Riesgo bajo"
-
         cfg["risk"] = risk
-        cfg["step"] = 2
 
+        cfg["step"] = 2
         prompt = (
             f"⚠️ *Clasificación de riesgo:* {risk}\n\n"
-            "¿Querés programar un recordatorio diario de ejercicios de respiración a las 09:00?"
+            "¿A qué hora te gustaría programar el recordatorio diario\n"
+            "de ejercicios de respiración? (formato HH:MM, p. ej. 15:30)"
         )
+        return enviar_Mensaje_whatsapp(text_Message(number, prompt))
+
+    # Paso 2: capturar hora y pedir confirmación
+    if step == 2:
+        hora = text.strip()
+        # validar formato HH:MM
+        if not re.match(r"^(?:[01]\d|2[0-3]):[0-5]\d$", hora):
+            return enviar_Mensaje_whatsapp(
+                text_Message(
+                    number,
+                    "Formato de hora inválido. Por favor ingresa la hora en formato HH:MM (por ejemplo 09:00)."
+                )
+            )
+        cfg["time"] = hora
+        cfg["step"] = 3
+        prompt = f"¿Confirmas programar el recordatorio diario a las {hora}?"
         return enviar_Mensaje_whatsapp(
             buttonReply_Message(
                 number,
                 ["Sí", "No"],
                 prompt,
-                "Informe al Terapeuta",
-                "informe_reminder",
+                "Confirmar Hora",
+                "informe_time_confirm",
                 messageId
             )
         )
 
-    # Paso 2: guardar recordatorio y enviar informe final
-    if step == 2:
+    # Paso 3: procesar confirmación de hora
+    if step == 3:
         if text.endswith("_btn_1"):
-            cfg["reminder"] = "Programado diario a las 09:00"
-            # aquí podrías crear la automación con automations.create(...)
+            # confirmado
+            hora = cfg["time"]
+            cfg["reminder"] = f"Programado diario a las {hora}"
+            # Aquí podrías llamar a automations.create(...) para programar realmente
+            # avanza a mostrar informe
+            cfg["step"] = 4
+            report = (
+                "📝 *Informe al Terapeuta*\n\n"
+                f"• *Motivo de consulta:* {cfg['motivo']}\n"
+                f"• *Clasificación de riesgo:* {cfg['risk']}\n"
+                f"• *Recordatorio respiración:* {cfg['reminder']}"
+            )
+            # primero muestro el informe
+            enviar_Mensaje_whatsapp(text_Message(number, report))
+            # luego pregunto si necesita más ayuda
+            return enviar_Mensaje_whatsapp(
+                buttonReply_Message(
+                    number,
+                    ["Sí", "No"],
+                    "¿Necesitás más ayuda?",
+                    "AMPARA IA",
+                    "informe_more",
+                    messageId
+                )
+            )
         else:
-            cfg["reminder"] = "No programado"
+            # rechazó la hora, volvemos a pedir
+            cfg["step"] = 2
+            return enviar_Mensaje_whatsapp(
+                text_Message(
+                    number,
+                    "Entendido. Ingresá nuevamente la hora para el recordatorio (HH:MM)."
+                )
+            )
 
-        report = (
-            "📝 *Informe al Terapeuta*\n\n"
-            f"• *Motivo de consulta:* {cfg['motivo']}\n"
-            f"• *Clasificación de riesgo:* {cfg['risk']}\n"
-            f"• *Recordatorio respiración:* {cfg['reminder']}"
-        )
-        session_states.pop(number)
-        return enviar_Mensaje_whatsapp(text_Message(number, report))
+    # Paso 4: tras el informe, más ayuda o despedida
+    if step == 4:
+        if text.endswith("_btn_1"):
+            # sí necesita más ayuda → volver al menú principal
+            session_states.pop(number)
+            menu = (
+                "¿Qué deseas hacer?\n"
+                "1. Psicoeducación Interactiva\n"
+                "2. Informe al Terapeuta\n"
+                "3. Recordatorios Terapéuticos"
+            )
+            return enviar_Mensaje_whatsapp(
+                buttonReply_Message(number, MICROSERVICES, menu, "AMPARA IA",
+                                    "main_menu", messageId)
+            )
+        else:
+            # no necesita más ayuda → despedida
+            session_states.pop(number)
+            despedida = "❤️ *Despedida:*\nGracias por usar AMPARA IA. ¡Cuídate y hasta la próxima!"
+            return enviar_Mensaje_whatsapp(text_Message(number, despedida))
 
 # ----------------------------------------
 # Dispatcher principal
