@@ -1086,13 +1086,11 @@ def dispatch_informe(number, messageId, text, name):
         cfg["motivo"] = motivo
 
         # clasificación por orden de mayor a menor
-        risk = "Sin riesgo detectado"
-        for nivel, kws in RISK_KEYWORDS.items():
-            if any(re.search(rf"\b{re.escape(kw)}\b", motivo, re.IGNORECASE) for kw in kws):
-                risk = nivel
-                break
-        if risk == "Sin riesgo detectado":
-            risk = "Riesgo bajo"
+        risk = next(
+            (nivel for nivel, kws in RISK_KEYWORDS.items()
+             if any(re.search(rf"\b{re.escape(kw)}\b", motivo, re.IGNORECASE) for kw in kws)),
+            "Riesgo bajo"
+        )
         cfg["risk"] = risk
 
         cfg["step"] = 3
@@ -1128,10 +1126,48 @@ def dispatch_informe(number, messageId, text, name):
             )
         )
 
-    # Paso 4: tras el informe, más ayuda o despedida
+    # Paso 4: mostrar resumen y preguntar si necesita más ayuda
     if step == 4:
         if text.endswith("_btn_1"):
-            # sí necesita más ayuda → volver al menú principal
+            # creó el informe completo
+            report = (
+                "📝 *Informe al Terapeuta*\n\n"
+                f"• *Usuario:* {cfg['name']} (RUT {cfg.get('rut','---')})\n"
+                f"• *Reporta que últimamente:* {cfg['motivo']}\n\n"
+                f"Esto según detecta AMPARA IA es de riesgo *{cfg['risk']}*.\n\n"
+                "Se deja bajo evaluación del terapeuta a cargo."
+            )
+            cfg["report"] = report
+            cfg["step"] = 5
+
+            # mostramos el informe en WhatsApp
+            enviar_Mensaje_whatsapp(text_Message(number, report))
+
+            # preguntamos si necesita más ayuda
+            return enviar_Mensaje_whatsapp(
+                buttonReply_Message(
+                    number,
+                    ["Sí", "No"],
+                    "¿Necesitás más ayuda?",
+                    "AMPARA IA",
+                    "informe_more",
+                    messageId
+                )
+            )
+        else:
+            # no confirmó la hora → volvemos al paso 3
+            cfg["step"] = 3
+            return enviar_Mensaje_whatsapp(
+                text_Message(
+                    number,
+                    "Entendido. Ingresá nuevamente la hora para el recordatorio (HH:MM)."
+                )
+            )
+
+    # Paso 5: procesar “¿Necesitás más ayuda?”
+    if step == 5:
+        if text.endswith("_btn_1"):
+            # Sí necesita más ayuda → volver al menú principal
             session_states.pop(number)
             menu = (
                 "¿Qué deseas hacer?\n"
@@ -1140,32 +1176,19 @@ def dispatch_informe(number, messageId, text, name):
                 "3. Recordatorios Terapéuticos"
             )
             return enviar_Mensaje_whatsapp(
-                buttonReply_Message(
-                    number,
-                    MICROSERVICES,
-                    menu,
-                    "AMPARA IA",
-                    "main_menu",
-                    messageId
-                )
+                buttonReply_Message(number, MICROSERVICES, menu, "AMPARA IA", "main_menu", messageId)
             )
         else:
-            # no necesita más ayuda → mostrar resumen y enviar mail
-            report = (
-                "📝 *Informe al Terapeuta*\n\n"
-                f"• *Usuario:* {cfg['name']} (RUT {cfg.get('rut','---')})\n"
-                f"• *Reporta que últimamente:* {cfg['motivo']}\n\n"
-                f"Esto según detecta AMPARA IA es de riesgo *{cfg['risk']}*.\n\n"
-                "Se deja bajo evaluación del terapeuta a cargo."
-            )
-            enviar_Mensaje_whatsapp(text_Message(number, report))
-            send_email("Informe AMPARA IA", report)
+            # No necesita más ayuda → enviamos el email y despedimos
+            send_email("Informe AMPARA IA", cfg["report"])
             session_states.pop(number)
-            despedida = (
-                "❤️ *Despedida:*\n"
-                "Gracias por usar AMPARA IA. ¡Cuídate y hasta la próxima!"
+            return enviar_Mensaje_whatsapp(
+                text_Message(
+                    number,
+                    "❤️ *Despedida:*\n"
+                    "Gracias por usar AMPARA IA. ¡Cuídate y hasta la próxima!"
+                )
             )
-            return enviar_Mensaje_whatsapp(text_Message(number, despedida))
 
 
 
