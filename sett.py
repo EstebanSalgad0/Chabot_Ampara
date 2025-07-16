@@ -18,7 +18,7 @@ if not WHATSAPP_TOKEN or not WHATSAPP_URL or not VERIFY_TOKEN:
 # ----------------------------------------
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
-EMAIL_USER = os.getenv("EMAIL_USER", "salgdoesteban95@gmail.com")
+EMAIL_USER = os.getenv("EMAIL_USER", "salgadoesteban95@gmail.com")
 EMAIL_PASS = os.getenv("EMAIL_PASS", "bzys nuqk rguq ukgb")      # tu contraseña de aplicación
 
 if not EMAIL_USER or not EMAIL_PASS:
