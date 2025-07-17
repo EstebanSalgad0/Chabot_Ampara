@@ -5,8 +5,23 @@ import time
 import random
 import re
 import smtplib
+import logging
 from email.mime.text import MIMEText
+from automations import create as create_task
 
+# ----------------------------------------
+# Logging configuración
+# ----------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+
+# ----------------------------------------
+# Parámetros configurables
+# ----------------------------------------
+SLEEP_MIN = 0.3
+SLEEP_MAX = 0.7
 
 # ----------------------------------------
 # Configuración de correo
@@ -1190,19 +1205,133 @@ def dispatch_informe(number, messageId, text, name):
                 )
             )
 
+# ----------------------------------------
+# Dispatcher de Recordatorios Terapéuticos (mejorado)
+# ----------------------------------------
+def dispatch_recordatorios(number, messageId, text, name):
+    cfg = session_states.get(number)
+    if not cfg or cfg.get("topic") != "recordatorios":
+        session_states[number] = {"topic": "recordatorios", "step": 0, "name": name}
+        cfg = session_states[number]
+        logging.info("Iniciando flujo recordatorios para %s", number)
 
+    step = cfg["step"]
 
+    # Paso 0: elegir tipo TCC
+    if step == 0:
+        cfg["step"] = 1
+        opciones = [
+            "Autorregistro cognitivo",
+            "Reestructuración cognitiva",
+            "Activación conductual",
+            "Exposición progresiva",
+            "Respiración y relajación",
+            "Registro de emociones y conducta"
+        ]
+        prompt = (
+            "🧠 *Recordatorios Terapéuticos – Enfoque TCC*\n\n"
+            "¿Qué tipo de tarea te gustaría programar?"
+        )
+        return enviar_Mensaje_whatsapp(
+            listReply_Message(
+                number, opciones, prompt,
+                "Recordatorios TCC", "recordatorios_tipo", messageId
+            )
+        )
+
+    # Paso 1: capturar tipo y pedir hora
+    if step == 1:
+        try:
+            idx = int(text.split("_")[-1]) - 1
+            tipos = [
+                "Autorregistro cognitivo",
+                "Reestructuración cognitiva",
+                "Activación conductual",
+                "Exposición progresiva",
+                "Respiración y relajación",
+                "Registro de emociones y conducta"
+            ]
+            cfg["tipo"] = tipos[idx]
+            logging.info("Usuario %s seleccionó %s", number, cfg["tipo"])
+        except (ValueError, IndexError):
+            logging.warning("Opción inválida en paso 1 de recordatorios: %s", text)
+            return enviar_Mensaje_whatsapp(
+                text_Message(
+                    number,
+                    "Opción inválida. Por favor selecciona una de las tareas mostradas."
+                )
+            )
+        cfg["step"] = 2
+        return enviar_Mensaje_whatsapp(
+            text_Message(
+                number,
+                f"Has elegido *{cfg['tipo']}*.\n\n¿A qué hora lo recuerdas cada día? (HH:MM)"
+            )
+        )
+
+    # Paso 2: validar hora y confirmar
+    if step == 2:
+        hora = text.strip()
+        if not re.match(r"^(?:[01]\d|2[0-3]):[0-5]\d$", hora):
+            logging.warning("Formato de hora inválido: %s", hora)
+            return enviar_Mensaje_whatsapp(
+                text_Message(number, "Formato inválido. Ingresa HH:MM.")
+            )
+        cfg["time"] = hora
+        cfg["step"] = 3
+        return enviar_Mensaje_whatsapp(
+            buttonReply_Message(
+                number,
+                ["Sí", "No"],
+                f"¿Confirmas recordatorio diario de *{cfg['tipo']}* a las {hora}?",
+                "Confirmar Hora",
+                "recordatorios_time_confirm",
+                messageId
+            )
+        )
+
+    # Paso 3: crear tarea o re-pedir hora
+    if step == 3:
+        if text.endswith("_btn_1"):
+            hh, mm = map(int, cfg["time"].split(':'))
+            try:
+                create_task(
+                    title=f"Recordatorio: {cfg['tipo']}",
+                    prompt=f"Recuerda tu ejercicio de *{cfg['tipo']}* de hoy.",
+                    schedule=(
+                        "BEGIN:VEVENT\n"
+                        f"RRULE:FREQ=DAILY;BYHOUR={hh};BYMINUTE={mm};BYSECOND=0\n"
+                        "END:VEVENT"
+                    )
+                )
+                logging.info("Tarea programada: %s a las %s", cfg["tipo"], cfg["time"])
+            except Exception as e:
+                logging.error("Error al crear la tarea: %s", e)
+                return enviar_Mensaje_whatsapp(
+                    text_Message(number, f"❌ No se pudo programar el recordatorio: {e}")
+                )
+            session_states.pop(number)
+            return enviar_Mensaje_whatsapp(
+                text_Message(
+                    number,
+                    f"✅ Programado *{cfg['tipo']}* todos los días a las {cfg['time']}."
+                )
+            )
+        else:
+            cfg["step"] = 2
+            return enviar_Mensaje_whatsapp(
+                text_Message(number, "Entendido. Ingresa nuevamente la hora (HH:MM).")
+            )
 
 # ----------------------------------------
-# Dispatcher principal
+# Dispatcher principal (con tiempo configurable)
 # ----------------------------------------
 def administrar_chatbot(text, number, messageId, name):
     enviar_Mensaje_whatsapp(markRead_Message(messageId))
     enviar_Mensaje_whatsapp(replyReaction_Message(number, messageId, "🧠"))
-    time.sleep(random.uniform(0.3, 0.7))
+    time.sleep(random.uniform(SLEEP_MIN, SLEEP_MAX))
 
     txt = text.strip().lower()
-    # Saludo y menú inicial
     if txt in ['hola','buenos días','buenas tardes','buenas noches']:
         body = (
             f"¡Hola {name}! Soy *AMPARA IA*, tu asistente virtual.\n"
@@ -1212,27 +1341,24 @@ def administrar_chatbot(text, number, messageId, name):
             "3. Recordatorios Terapéuticos"
         )
         return enviar_Mensaje_whatsapp(
-            buttonReply_Message(number, MICROSERVICES, body, "AMPARA IA",
-                                "main_menu", messageId)
+            buttonReply_Message(number, MICROSERVICES, body, "AMPARA IA", "main_menu", messageId)
         )
 
-    # Inicia Psicoeducación Interactiva
     if text == "main_menu_btn_1":
         return dispatch_flow(number, messageId, "", "ansiedad")
-
-    # Inicia Informe al Terapeuta
     if text == "main_menu_btn_2":
         return dispatch_informe(number, messageId, "", name)
+    if text == "main_menu_btn_3":
+        return dispatch_recordatorios(number, messageId, "", name)
 
-    # Delegar según flujo activo
     if number in session_states:
         topic = session_states[number].get("topic")
         if topic == "informe":
             return dispatch_informe(number, messageId, text, name)
-        else:
-            return dispatch_flow(number, messageId, text, topic)
+        if topic == "recordatorios":
+            return dispatch_recordatorios(number, messageId, text, name)
+        return dispatch_flow(number, messageId, text, topic)
 
-    # Cualquier otro input
     return enviar_Mensaje_whatsapp(
         text_Message(number, "No entendí. Escribí 'hola' para volver al menú.")
     )
