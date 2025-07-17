@@ -7,15 +7,13 @@ import re
 import smtplib
 import logging
 from email.mime.text import MIMEText
-from automations import create as create_task
 
-# ----------------------------------------
-# Logging configuración
-# ----------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+
+
+
+
+# Configuración de logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s:%(message)s")
 
 # ----------------------------------------
 # Parámetros configurables
@@ -1206,14 +1204,15 @@ def dispatch_informe(number, messageId, text, name):
             )
 
 # ----------------------------------------
-# Dispatcher de Recordatorios Terapéuticos (mejorado)
+# Dispatcher de Recordatorios Terapéuticos (simplificado)
 # ----------------------------------------
 def dispatch_recordatorios(number, messageId, text, name):
     cfg = session_states.get(number)
     if not cfg or cfg.get("topic") != "recordatorios":
+        # Inicio de flujo
         session_states[number] = {"topic": "recordatorios", "step": 0, "name": name}
         cfg = session_states[number]
-        logging.info("Iniciando flujo recordatorios para %s", number)
+        logging.info("Iniciando flujo de recordatorios para %s", number)
 
     step = cfg["step"]
 
@@ -1283,38 +1282,23 @@ def dispatch_recordatorios(number, messageId, text, name):
             buttonReply_Message(
                 number,
                 ["Sí", "No"],
-                f"¿Confirmas recordatorio diario de *{cfg['tipo']}* a las {hora}?",
+                f"¿Confirmas que quieres un recordatorio diario de *{cfg['tipo']}* a las {hora}?",
                 "Confirmar Hora",
                 "recordatorios_time_confirm",
                 messageId
             )
         )
 
-    # Paso 3: crear tarea o re-pedir hora
+    # Paso 3: confirmar o reiniciar
     if step == 3:
         if text.endswith("_btn_1"):
-            hh, mm = map(int, cfg["time"].split(':'))
-            try:
-                create_task(
-                    title=f"Recordatorio: {cfg['tipo']}",
-                    prompt=f"Recuerda tu ejercicio de *{cfg['tipo']}* de hoy.",
-                    schedule=(
-                        "BEGIN:VEVENT\n"
-                        f"RRULE:FREQ=DAILY;BYHOUR={hh};BYMINUTE={mm};BYSECOND=0\n"
-                        "END:VEVENT"
-                    )
-                )
-                logging.info("Tarea programada: %s a las %s", cfg["tipo"], cfg["time"])
-            except Exception as e:
-                logging.error("Error al crear la tarea: %s", e)
-                return enviar_Mensaje_whatsapp(
-                    text_Message(number, f"❌ No se pudo programar el recordatorio: {e}")
-                )
+            logging.info("Usuario %s confirmó recordatorio %s a las %s",
+                         number, cfg["tipo"], cfg["time"])
             session_states.pop(number)
             return enviar_Mensaje_whatsapp(
                 text_Message(
                     number,
-                    f"✅ Programado *{cfg['tipo']}* todos los días a las {cfg['time']}."
+                    f"✅ Perfecto, te recordaré *{cfg['tipo']}* todos los días a las {cfg['time']}."
                 )
             )
         else:
