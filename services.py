@@ -1158,7 +1158,7 @@ def dispatch_informe(number, messageId, text, name):
 
     if step == 4 and text.endswith("_btn_2"):
         cfg["step"] = 3
-        return enviar_Mensaje_whatsapp(text_Message(number, "Ingresa nuevamente la hora (HH:MM)."))
+        return enviar_Mensaje_whatsapp(text_Message(number, "Ingresa nuevamente la hora (HH:MM) Hrs."))
 
     # Paso 5: procesar más ayuda tras respiración
     if step == 5:
@@ -1182,7 +1182,7 @@ def dispatch_informe(number, messageId, text, name):
         cfg["step"] = 7
         return enviar_Mensaje_whatsapp(buttonReply_Message(
             number, ["Sí", "No"],
-            f"¿Confirmas recordarme contactar a tu terapeuta a las {hora_c}?",
+            f"¿Confirmas contactar a tu terapeuta a las {hora_c}?",
             "Confirmar Contacto", "informe_contact_confirm", messageId
         ))
 
@@ -1200,7 +1200,7 @@ def dispatch_informe(number, messageId, text, name):
         session_states.pop(number)
         return enviar_Mensaje_whatsapp(text_Message(
             number,
-            report + "\n\n❤️ ¡Cuídate mucho!"
+            report + "\n\n❤️ ¡Cuídate mucho! y recuerda que no estas solo/a, siempre hay ayuda disponible."
         ))
     if step == 7 and text.endswith("_btn_2"):
         session_states.pop(number)
