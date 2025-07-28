@@ -1093,7 +1093,8 @@ def dispatch_informe(number, messageId, text, name):
             )
         )
 
-    # Paso 2: clasificar riesgo y pedir hora de recordatorio
+    # Paso 2: clasificar riesgo y, si es bajo/medio, pedir hora de recordatorio;
+    # si es alto o suicida, enviar contención y preguntar si quiere recordatorio de contacto
     if step == 2:
         motivo = text.strip()
         cfg["motivo"] = motivo
@@ -1106,6 +1107,30 @@ def dispatch_informe(number, messageId, text, name):
         )
         cfg["risk"] = risk
 
+        # si es riesgo alto o suicida, enviamos alerta de contención
+        if risk.lower() in ("riesgo alto", "suicida", "riesgo suicida"):
+            cfg["step"] = 6
+            # Mensaje de contención urgente
+            enviar_Mensaje_whatsapp(text_Message(
+                number,
+                "🚨 *Alerta de riesgo elevado* 🚨\n\n"
+                "Detectamos indicios de riesgo alto o pensamientos suicidas.\n"
+                "Si estás en peligro inminente, llama a tu número de emergencia local o busca ayuda médica de inmediato.\n"
+                "También puedes contactar a tu terapeuta de confianza o a una línea de ayuda psicológica."
+            ))
+            # Botones para recordatorio de contacto
+            return enviar_Mensaje_whatsapp(
+                buttonReply_Message(
+                    number,
+                    ["Sí", "No"],
+                    "¿Quieres que te recuerde hoy comunicarte con tu terapeuta?",
+                    "AMPARA IA",
+                    "informe_contact_prof",
+                    messageId
+                )
+            )
+
+        # caso normal: programar recordatorio de respiración
         cfg["step"] = 3
         return enviar_Mensaje_whatsapp(
             text_Message(
@@ -1148,7 +1173,8 @@ def dispatch_informe(number, messageId, text, name):
                 f"• *Usuario:* {cfg['name']} (RUT {cfg.get('rut','---')})\n"
                 f"• *Reporta que últimamente:* {cfg['motivo']}\n\n"
                 f"Esto según detecta AMPARA IA es de riesgo *{cfg['risk']}*.\n\n"
-                "Se deja bajo evaluación del terapeuta a cargo."
+                "Se deja bajo evaluación del terapeuta a cargo.\n\n"
+                "Te sugiero también contactar a tu profesional a cargo si lo consideras necesario."
             )
             cfg["report"] = report
             cfg["step"] = 5
@@ -1203,8 +1229,29 @@ def dispatch_informe(number, messageId, text, name):
                 )
             )
 
+    # Paso 6: procesar recordatorio de contacto para riesgo alto/suicida
+    if step == 6:
+        if text.endswith("_btn_1"):
+            # usuario acepta recordatorio
+            enviar_Mensaje_whatsapp(text_Message(
+                number,
+                "👍 Perfecto. Te recordaré hoy comunicarte con tu terapeuta.\n"
+                "Recuerda que este espacio es complementario."
+            ))
+        else:
+            # usuario no acepta recordatorio
+            enviar_Mensaje_whatsapp(text_Message(
+                number,
+                "Entiendo. Si cambias de opinión, escríbeme “Recordar terapeuta” en cualquier momento.\n"
+                "De todas formas, te sugiero contactar a tu profesional a cargo."
+            ))
+        # finalizamos sesión
+        session_states.pop(number)
+        return
+
+
 # ----------------------------------------
-# Dispatcher de Recordatorios Terapéuticos (simplificado)
+# Dispatcher de Recordatorios Terapéuticos (con retorno al menú o despedida)
 # ----------------------------------------
 def dispatch_recordatorios(number, messageId, text, name):
     cfg = session_states.get(number)
@@ -1282,30 +1329,63 @@ def dispatch_recordatorios(number, messageId, text, name):
             buttonReply_Message(
                 number,
                 ["Sí", "No"],
-                f"¿Confirmas que quieres un recordatorio diario de *{cfg['tipo']}* a las {hora}?",
+                f"¿Confirmas que quieres un recordatorio diario de *{cfg['tipo']}* a las {hora} Hrs?",
                 "Confirmar Hora",
                 "recordatorios_time_confirm",
                 messageId
             )
         )
 
-    # Paso 3: confirmar o reiniciar
-    if step == 3:
+    # Paso 3: tras confirmar, preguntar si necesita algo más
+    if step == 3 and text.endswith("_btn_1"):
+        logging.info("Usuario %s confirmó recordatorio %s a las %s",
+                     number, cfg["tipo"], cfg["time"])
+        cfg["step"] = 4
+        # confirmación del recordatorio
+        enviar_Mensaje_whatsapp(text_Message(
+            number,
+            f"✅ Perfecto, te recordaré *{cfg['tipo']}* todos los días a las {cfg['time']} Hrs."
+        ))
+        # pregunta de seguimiento
+        return enviar_Mensaje_whatsapp(
+            buttonReply_Message(
+                number,
+                ["Sí", "No"],
+                "¿Necesitás realizar algo más?",
+                "AMPARA IA",
+                "recordatorios_more",
+                messageId
+            )
+        )
+    # Paso 3 alternativa: reiniciar hora
+    if step == 3 and text.endswith("_btn_2"):
+        cfg["step"] = 2
+        return enviar_Mensaje_whatsapp(
+            text_Message(number, "Entendido. Ingresa nuevamente la hora (HH:MM).")
+        )
+
+    # Paso 4: procesar “¿Necesitás realizar algo más?”
+    if step == 4:
         if text.endswith("_btn_1"):
-            logging.info("Usuario %s confirmó recordatorio %s a las %s",
-                         number, cfg["tipo"], cfg["time"])
+            # vuelve al menú principal
             session_states.pop(number)
+            menu = (
+                "¿Qué deseas hacer?\n"
+                "1. Psicoeducación Interactiva\n"
+                "2. Informe al Terapeuta\n"
+                "3. Recordatorios Terapéuticos"
+            )
             return enviar_Mensaje_whatsapp(
-                text_Message(
-                    number,
-                    f"✅ Perfecto, te recordaré *{cfg['tipo']}* todos los días a las {cfg['time']}."
-                )
+                buttonReply_Message(number, MICROSERVICES, menu, "AMPARA IA", "main_menu", messageId)
             )
         else:
-            cfg["step"] = 2
-            return enviar_Mensaje_whatsapp(
-                text_Message(number, "Entendido. Ingresa nuevamente la hora (HH:MM).")
-            )
+            # despedida y fin de flujo
+            session_states.pop(number)
+            return enviar_Mensaje_whatsapp(text_Message(
+                number,
+                "❤️ Gracias por usar AMPARA IA. ¡Cuídate y hasta la próxima!"
+            ))
+
 
 # ----------------------------------------
 # Dispatcher principal (con tiempo configurable)
