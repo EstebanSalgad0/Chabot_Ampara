@@ -1065,7 +1065,6 @@ def dispatch_flow(number, messageId, text, topic):
 def dispatch_informe(number, messageId, text, name):
     cfg = session_states.get(number)
     if not cfg:
-        # arrancamos pidiendo el RUT
         session_states[number] = {"topic": "informe", "step": 0, "name": name}
         cfg = session_states[number]
 
@@ -1074,31 +1073,25 @@ def dispatch_informe(number, messageId, text, name):
     # Paso 0: pedir RUT
     if step == 0:
         cfg["step"] = 1
-        return enviar_Mensaje_whatsapp(
-            text_Message(
-                number,
-                "📝 *Informe al Terapeuta*\n\n"
-                "Para comenzar, por favor ingresa tu RUT (sin puntos, con guión)."
-            )
-        )
+        return enviar_Mensaje_whatsapp(text_Message(
+            number,
+            "📝 *Informe al Terapeuta*\n\n"
+            "Para comenzar, por favor ingresa tu RUT (sin puntos, con guión)."
+        ))
 
     # Paso 1: capturar RUT y pedir motivo
     if step == 1:
         cfg["rut"] = text.strip()
         cfg["step"] = 2
-        return enviar_Mensaje_whatsapp(
-            text_Message(
-                number,
-                "Gracias. Ahora, por favor describí el motivo de consulta principal."
-            )
-        )
+        return enviar_Mensaje_whatsapp(text_Message(
+            number,
+            "Gracias. Ahora, por favor describí el motivo de consulta principal."
+        ))
 
-    # Paso 2: clasificar riesgo y ramificar flujo
+    # Paso 2: clasificar riesgo
     if step == 2:
         motivo = text.strip()
         cfg["motivo"] = motivo
-
-        # clasificación por orden de mayor a menor
         risk = next(
             (nivel for nivel, kws in RISK_KEYWORDS.items()
              if any(re.search(rf"\b{re.escape(kw)}\b", motivo, re.IGNORECASE)
@@ -1107,135 +1100,115 @@ def dispatch_informe(number, messageId, text, name):
         )
         cfg["risk"] = risk
 
-        # si el nivel contiene “suicid”, tratamos como riesgo alto
+        # caso riesgo alto/suicida: pedir hora recordatorio de contacto
         if "suicid" in risk.lower():
             cfg["step"] = 6
-            # Mensaje de contención urgente
             enviar_Mensaje_whatsapp(text_Message(
                 number,
                 "🚨 *Alerta de riesgo elevado* 🚨\n\n"
                 "Detectamos indicios de riesgo alto o pensamientos suicidas.\n"
                 "Si estás en peligro inminente, llama a tu número de emergencia local o busca ayuda médica de inmediato.\n"
-                "También puedes contactar a tu terapeuta de confianza o a una línea de ayuda psicológica."
+                "También puedes contactar a tu terapeuta de confianza."
             ))
-            # Botones para recordatorio de contacto
-            return enviar_Mensaje_whatsapp(
-                buttonReply_Message(
-                    number,
-                    ["Sí", "No"],
-                    "¿Quieres que te recuerde hoy comunicarte con tu terapeuta?",
-                    "AMPARA IA",
-                    "informe_contact_prof",
-                    messageId
-                )
-            )
-
-        # flujo normal (riesgo bajo/medio): programar recordatorio de respiración
-        cfg["step"] = 3
-        return enviar_Mensaje_whatsapp(
-            text_Message(
+            return enviar_Mensaje_whatsapp(text_Message(
                 number,
-                f"⚠️ *Clasificación de riesgo:* {risk}\n\n"
-                "¿A qué hora te gustaría programar el recordatorio diario\n"
-                "de ejercicios de respiración? (formato HH:MM, p. ej. 15:30)"
-            )
-        )
+                "¿A qué hora te gustaría programar un recordatorio para contactar a tu terapeuta? (HH:MM)"
+            ))
 
-    # Paso 3: capturar hora y pedir confirmación
+        # flujo normal respiración
+        cfg["step"] = 3
+        return enviar_Mensaje_whatsapp(text_Message(
+            number,
+            f"⚠️ *Clasificación de riesgo:* {risk}\n\n"
+            "¿A qué hora te gustaría programar el recordatorio diario\n"
+            "de ejercicios de respiración? (formato HH:MM, p. ej. 15:30)"
+        ))
+
+    # Paso 3: capturar hora respiración y pedir confirmación
     if step == 3:
         hora = text.strip()
         if not re.match(r"^(?:[01]\d|2[0-3]):[0-5]\d$", hora):
-            return enviar_Mensaje_whatsapp(
-                text_Message(
-                    number,
-                    "Formato de hora inválido. Por favor ingresa la hora en formato HH:MM."
-                )
-            )
+            return enviar_Mensaje_whatsapp(text_Message(number, "Formato inválido. Usa HH:MM."))
         cfg["time"] = hora
         cfg["step"] = 4
-        return enviar_Mensaje_whatsapp(
-            buttonReply_Message(
-                number,
-                ["Sí", "No"],
-                f"¿Confirmas programar el recordatorio diario a las {hora}?",
-                "Confirmar Hora",
-                "informe_time_confirm",
-                messageId
-            )
+        return enviar_Mensaje_whatsapp(buttonReply_Message(
+            number, ["Sí", "No"],
+            f"¿Confirmas el recordatorio diario de respiración a las {hora}?",
+            "Confirmar Hora", "informe_time_confirm", messageId
+        ))
+
+    # Paso 4: confirmar respiración → resumen y más ayuda
+    if step == 4 and text.endswith("_btn_1"):
+        report = (
+            "📝 *Informe al Terapeuta*\n\n"
+            f"• *Usuario:* {cfg['name']} (RUT {cfg.get('rut','---')})\n"
+            f"• *Motivo:* {cfg['motivo']}\n\n"
+            f"Riesgo detectado: *{cfg['risk']}*.\n"
+            f"Recordatorio de respiración a las {cfg['time']} programado.\n\n"
+            "Se deja bajo evaluación del terapeuta.\n"
+            "Te sugiero también contactar a tu profesional si lo consideras necesario."
         )
+        cfg["report"] = report
+        cfg["step"] = 5
+        enviar_Mensaje_whatsapp(text_Message(number, report))
+        return enviar_Mensaje_whatsapp(buttonReply_Message(
+            number, ["Sí", "No"], "¿Necesitás más ayuda?", "AMPARA IA",
+            "informe_more", messageId
+        ))
 
-    # Paso 4: mostrar resumen y preguntar si necesita más ayuda
-    if step == 4:
-        if text.endswith("_btn_1"):
-            report = (
-                "📝 *Informe al Terapeuta*\n\n"
-                f"• *Usuario:* {cfg['name']} (RUT {cfg.get('rut','---')})\n"
-                f"• *Reporta que últimamente:* {cfg['motivo']}\n\n"
-                f"Esto según detecta AMPARA IA es de riesgo *{cfg['risk']}*.\n\n"
-                "Se deja bajo evaluación del terapeuta a cargo.\n\n"
-                "Te sugiero también contactar a tu profesional a cargo si lo consideras necesario."
-            )
-            cfg["report"] = report
-            cfg["step"] = 5
-            enviar_Mensaje_whatsapp(text_Message(number, report))
-            return enviar_Mensaje_whatsapp(
-                buttonReply_Message(
-                    number,
-                    ["Sí", "No"],
-                    "¿Necesitás más ayuda?",
-                    "AMPARA IA",
-                    "informe_more",
-                    messageId
-                )
-            )
-        else:
-            cfg["step"] = 3
-            return enviar_Mensaje_whatsapp(
-                text_Message(
-                    number,
-                    "Entendido. Ingresá nuevamente la hora para el recordatorio (HH:MM)."
-                )
-            )
+    if step == 4 and text.endswith("_btn_2"):
+        cfg["step"] = 3
+        return enviar_Mensaje_whatsapp(text_Message(number, "Ingresa nuevamente la hora (HH:MM)."))
 
-    # Paso 5: procesar “¿Necesitás más ayuda?”
+    # Paso 5: procesar más ayuda tras respiración
     if step == 5:
         if text.endswith("_btn_1"):
             session_states.pop(number)
-            menu = (
-                "¿Qué deseas hacer?\n"
-                "1. Psicoeducación Interactiva\n"
-                "2. Informe al Terapeuta\n"
-                "3. Recordatorios Terapéuticos"
-            )
-            return enviar_Mensaje_whatsapp(
-                buttonReply_Message(number, MICROSERVICES, menu, "AMPARA IA", "main_menu", messageId)
-            )
+            return enviar_Mensaje_whatsapp(buttonReply_Message(
+                number, MICROSERVICES,
+                "¿Qué deseas hacer?\n1. Psicoeducación\n2. Informe\n3. Recordatorios",
+                "AMPARA IA", "main_menu", messageId
+            ))
         send_email("Informe AMPARA IA", cfg["report"])
         session_states.pop(number)
-        return enviar_Mensaje_whatsapp(
-            text_Message(
-                number,
-                "❤️ *Despedida:*\n"
-                "Gracias por usar AMPARA IA. ¡Cuídate y hasta la próxima!"
-            )
-        )
+        return enviar_Mensaje_whatsapp(text_Message(number, "❤️ Gracias, ¡hasta la próxima!"))
 
-    # Paso 6: procesar recordatorio de contacto para riesgo alto/suicida
+    # Paso 6: capturar hora contacto terapeuta y pedir confirmación
     if step == 6:
-        if text.endswith("_btn_1"):
-            enviar_Mensaje_whatsapp(text_Message(
-                number,
-                "👍 Perfecto. Te recordaré hoy comunicarme con tu terapeuta.\n"
-                "Recuerda que este espacio es complementario."
-            ))
-        else:
-            enviar_Mensaje_whatsapp(text_Message(
-                number,
-                "Entiendo. Si cambias de opinión, escríbeme “Recordar terapeuta” en cualquier momento.\n"
-                "De todas formas, te sugiero contactar a tu profesional a cargo."
-            ))
+        hora_c = text.strip()
+        if not re.match(r"^(?:[01]\d|2[0-3]):[0-5]\d$", hora_c):
+            return enviar_Mensaje_whatsapp(text_Message(number, "Formato inválido. Usa HH:MM."))
+        cfg["time_contact"] = hora_c
+        cfg["step"] = 7
+        return enviar_Mensaje_whatsapp(buttonReply_Message(
+            number, ["Sí", "No"],
+            f"¿Confirmas recordarme contactar a tu terapeuta a las {hora_c}?",
+            "Confirmar Contacto", "informe_contact_confirm", messageId
+        ))
+
+    # Paso 7: confirmar contacto → resumen y despedida
+    if step == 7 and text.endswith("_btn_1"):
+        report = (
+            "📝 *Informe al Terapeuta*\n\n"
+            f"• *Usuario:* {cfg['name']} (RUT {cfg.get('rut','---')})\n"
+            f"• *Motivo:* {cfg['motivo']}\n\n"
+            f"Riesgo detectado: *{cfg['risk']}*.\n"
+            f"Recordatorio de contacto a las {cfg['time_contact']} programado.\n\n"
+            "¡Gracias por informar! Tu terapeuta evaluará tu caso."
+        )
+        send_email("Informe AMPARA IA", report)
         session_states.pop(number)
-        return
+        return enviar_Mensaje_whatsapp(text_Message(
+            number,
+            report + "\n\n❤️ ¡Cuídate mucho!"
+        ))
+    if step == 7 and text.endswith("_btn_2"):
+        session_states.pop(number)
+        return enviar_Mensaje_whatsapp(text_Message(
+            number,
+            "Entendido. Si cambias de opinión, escríbeme “Recordar terapeuta”."
+        ))
+
 
 
 
