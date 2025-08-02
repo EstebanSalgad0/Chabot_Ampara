@@ -165,11 +165,16 @@ def obtener_Mensaje_whatsapp(message):
 
 
 def enviar_Mensaje_whatsapp(data):
-    """Envía un payload JSON a la API de WhatsApp."""
+    """
+    Envía un payload JSON a la API de WhatsApp.
+    Usa las variables de entorno definidas en sett.py:
+      - WHATSAPP_TOKEN
+      - WHATSAPP_URL
+    """
     try:
         headers = {
             'Content-Type': 'application/json',
-            'Authorization': f"Bearer {sett.whatsapp_token}"
+            'Authorization': f"Bearer {sett.WHATSAPP_TOKEN}"
         }
         print("--- Enviando JSON ---")
         try:
@@ -177,7 +182,7 @@ def enviar_Mensaje_whatsapp(data):
         except:
             print(data)
         print("---------------------")
-        resp = requests.post(sett.whatsapp_url, headers=headers, data=data)
+        resp = requests.post(sett.WHATSAPP_URL, headers=headers, data=data)
         if resp.status_code == 200:
             print("Mensaje enviado correctamente")
         else:
