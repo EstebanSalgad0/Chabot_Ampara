@@ -114,7 +114,7 @@ def enviar_Mensaje_whatsapp(data):
     resp = requests.post(sett.WHATSAPP_URL, headers=headers, data=data)
     if resp.status_code != 200:
         print(f"Error {resp.status_code}: {resp.text}")
-    return resp.text, resp.status_codee
+    return resp.text, resp.status_code
 
 
 def text_Message(number, text):
