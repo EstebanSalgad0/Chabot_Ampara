@@ -3,14 +3,80 @@ import sett
 import json
 import time
 import random
-import re
-import sqlite3
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
-# ===== Nuevas constantes para recordatorios y horarios =====
-TZ_CL = ZoneInfo("America/Santiago")
-DB_PATH = "medicai.db"
+# -----------------------------------------------------------
+# Estado para Guía de Ruta / Derivaciones
+# -----------------------------------------------------------
+global route_sessions
+route_sessions = {}  # { number: {"step": "...", "doc_type": "", "ges": "", "edad": int|None, "embarazada": bool|None} }
+
+# ==================== GUÍA DE RUTA: HELPERS ====================
+def start_route_flow(number, messageId):
+    body = (
+        "🏥 Soy MedicAI. Puedo guiarte con tu documentación/derivación.\n"
+        "¿Qué recibiste?"
+    )
+    footer = "Guía de Ruta"
+    options = [
+        "📄 Interconsulta médica",
+        "🧾 Orden de exámenes / procedimiento",
+        "💊 Receta o indicación de tratamiento",
+        "🚨 Derivación urgente",
+        "❓ No estoy seguro/a",
+    ]
+    route_sessions[number] = {"step": "choose_type"}
+    return listReply_Message(number, options, body, footer, "route_type", messageId)
+
+def ask_ges(number, messageId):
+    body = "¿Tu interconsulta está cubierta por el GES (Garantías Explícitas en Salud)?"
+    footer = "Interconsulta"
+    options = ["Sí, es GES", "No, no es GES", "No lo sé"]
+    route_sessions[number]["step"] = "ask_ges"
+    return listReply_Message(number, options, body, footer, "route_ges", messageId)
+
+def interconsulta_instructions(ges_option):
+    if ges_option == "Sí, es GES":
+        return (
+            "✅ *Interconsulta GES*\n"
+            "• Ingresa la interconsulta en SOME del CESFAM y pide número de seguimiento.\n"
+            "• Te contactarán para coordinar especialidad/exámenes dentro de plazos GES.\n"
+            "¿Quieres configurar un recordatorio de *revisión de estado GES*?"
+        )
+    else:
+        return (
+            "ℹ️ *Interconsulta NO GES o no confirmada*\n"
+            "• Lleva la interconsulta a SOME del CESFAM y confirma que quedó ingresada.\n"
+            "• Pregunta si requieren exámenes previos y un número de contacto.\n"
+            "¿Te indico en qué sede del CESFAM hacer el trámite?"
+        )
+
+def exams_steps():
+    return (
+        "🧪 *Orden de exámenes / procedimiento*\n"
+        "• Agenda hora en SOME/Laboratorio.\n"
+        "• Verifica si requiere *ayuno* (ej. glicemia/perfil lipídico).\n"
+        "• Presenta cédula y la orden del profesional.\n"
+        "¿Quieres que revisemos si tu examen requiere *ayuno*?"
+    )
+
+def urgent_referral_steps():
+    return (
+        "🚨 *Derivación urgente*\n"
+        "• Debes acudir *de inmediato* al servicio indicado (SAPU/SAR o Urgencia hospitalaria).\n"
+        "• Si empeoras en el trayecto, llama al 131 (SAMU).\n"
+        "¿Te indico el SAPU más cercano si me das tu comuna?"
+    )
+
+def req_docs_steps():
+    return (
+        "🧾 *Checklist de requisitos frecuentes*\n"
+        "• Orden/interconsulta\n"
+        "• Cédula de identidad\n"
+        "• Exámenes previos (si los hay)\n"
+        "• A veces: cartola del Registro Social de Hogares\n"
+        "¿Quieres que lo guarde y te envíe *recordatorios*?"
+    )
+# ==================== FIN HELPERS GUÍA DE RUTA ====================
 
 # Única definición de estado de sesión
 global session_states
@@ -52,8 +118,8 @@ RECOMENDACIONES_GENERALES = {
         "• Humidifica el ambiente y ventílalo a diario.\n"
         "• Usa mascarilla si convives con personas de riesgo.\n"
         "• Evita irritantes como humo, polvo o polución.\n"
-        "• Controla tu temperatura cada 6 h.\n"
-        "Si empeoras o la fiebre supera 39 °C, consulta a un profesional."
+        "• Controla tu temperatura cada 6 h.\n"
+        "Si empeoras o la fiebre supera 39 °C, consulta a un profesional."
     ),
     "bucal": (
         "• Cepíllate los dientes al menos dos veces al día.\n"
@@ -74,7 +140,7 @@ RECOMENDACIONES_GENERALES = {
     "cardiovascular": (
         "• Controla tu presión arterial regularmente.\n"
         "• Sigue una dieta baja en sal y grasas saturadas.\n"
-        "• Realiza ejercicio moderado (30 min diarios) si tu médico lo autoriza.\n"
+        "• Realiza ejercicio moderado (30 min diarios) si tu médico lo autoriza.\n"
         "• Evita tabaco y consumo excesivo de alcohol.\n"
         "• Vigila dolores torácicos, palpitaciones o hinchazón.\n"
         "Si aparece dolor en el pecho o disnea, busca ayuda inmediata."
@@ -115,7 +181,7 @@ RECOMENDACIONES_GENERALES = {
         "• Hidrata la piel con emolientes adecuados.\n"
         "• Evita jabones o detergentes agresivos.\n"
         "• No rasques lesiones ni uses remedios caseros.\n"
-        "• Protege tu piel del sol con FPS ≥ 30.\n"
+        "• Protege tu piel del sol con FPS ≥ 30.\n"
         "• Identifica y evita alérgenos o irritantes.\n"
         "Si notas pus, fiebre o expansión de la lesión, consulta a dermatología."
     ),
@@ -150,6 +216,7 @@ RECOMENDACIONES_GENERALES = {
     ),
 }
 
+
 # -----------------------------------------------------------
 # Funciones de mensajería y parsing de WhatsApp
 # -----------------------------------------------------------
@@ -168,35 +235,23 @@ def obtener_Mensaje_whatsapp(message):
             return interactive['list_reply']['id']
         elif interactive['type'] == 'button_reply':
             return interactive['button_reply']['id']
-    # === NUEVO: soportar media para Explainer ===
-    elif t == 'image':
-        return f"__media_image__:{message['image']['id']}"
-    elif t == 'document':
-        mime = message['document'].get('mime_type', '')
-        return f"__media_document__:{message['document']['id']}|{mime}"
     return 'mensaje no procesado'
 
 
 def enviar_Mensaje_whatsapp(data):
-    """Envía un payload JSON a la API de WhatsApp.
-    Usa las variables de entorno definidas en sett.py:
-      - WHATSAPP_TOKEN
-      - WHATSAPP_URL
-    """
+    """Envía un payload JSON a la API de WhatsApp."""
     try:
         headers = {
             'Content-Type': 'application/json',
-            'Authorization': f"Bearer {sett.WHATSAPP_TOKEN}"
+            'Authorization': f"Bearer {sett.whatsapp_token}"
         }
         print("--- Enviando JSON ---")
         try:
             print(json.dumps(json.loads(data), indent=2, ensure_ascii=False))
-        except Exception:
+        except:
             print(data)
         print("---------------------")
-        # Si tienes ambas variables en sett, deja solo una llamada
-        # resp = requests.post(sett.whatsapp_url, headers=headers, data=data)
-        resp = requests.post(sett.WHATSAPP_URL, headers=headers, data=data)
+        resp = requests.post(sett.whatsapp_url, headers=headers, data=data)
         if resp.status_code == 200:
             print("Mensaje enviado correctamente")
         else:
@@ -272,7 +327,6 @@ def markRead_Message(messageId):
         "status": "read",
         "message_id": messageId
     })
-
 
 # -----------------------------------------------------------
 # Funciones para determinar diagnóstico según cada categoría
@@ -1128,8 +1182,6 @@ def handle_orientacion(text, number, messageId):
     }
 
 
-    
-
 
     # Paso 1: extracción → confirmación con botones
     if paso == "extraccion":
@@ -1199,262 +1251,61 @@ def handle_orientacion(text, number, messageId):
             return text_Message(number, "Entendido. Por favor describe nuevamente tus síntomas.")
 
 
-# ========= Explainer de documentos =========
-def _doc_menu(number, messageId):
-    body = ("Soy *MedicAI*, te ayudo a entender *recetas, exámenes, interconsultas* e indicaciones.\n"
-            "¿Cómo quieres ingresar el documento?")
-    footer = "Explainer de Documentos"
-    opts = ["📷 Tomar una foto", "🖼 Subir un archivo", "✍️ Escribir manualmente", "❓ No sé cómo hacerlo"]
-    return listReply_Message(number, opts, body, footer, "doc_menu", messageId)
-
-def _doc_set_flow(number, step):
-    session_states[number] = {"flow": "doc", "step": step, "buffer": ""}
-
-def _try_extract_numbers(text):
-    out = []
-    # LDL
-    m = re.search(r"\bldl\b[^0-9]*(\d+\.?\d*)\s*mg/?dl", text, re.I)
-    if m:
-        val = float(m.group(1))
-        out.append(f"LDL {int(val) if val.is_integer() else val} mg/dL → "
-                   f"{'dentro del rango objetivo general (≤130).' if val <= 130 else 'colesterol “malo” alto. Meta general <130 mg/dL.'}")
-    # Glicemia
-    m = re.search(r"\bglic(emia)?\b[^0-9]*(\d+\.?\d*)\s*mg/?dl", text, re.I)
-    if m:
-        val = float(m.group(2))
-        out.append(f"Glicemia {int(val) if val.is_integer() else val} mg/dL → "
-                   f"{'normal en ayunas (70–99).' if val < 100 else 'algo elevada; posible prediabetes si es en ayunas (≥100).'}")
-    # Presión arterial tipo 145/95
-    m = re.search(r"\b(\d{2,3})\s*/\s*(\d{2,3})\b", text)
-    if m:
-        s, d = int(m.group(1)), int(m.group(2))
-        msg = f"Presión arterial {s}/{d} mmHg → elevada; requiere seguimiento si persiste."
-        if s >= 180 or d >= 120:
-            msg += " ⚠️ *Alerta*: cifra muy alta; consultar de urgencia."
-        out.append(msg)
-    # “Paracetamol 500mg cada 8 horas”
-    m = re.search(r"\b(paracetamol|ibuprofeno|amoxicilina)\b[^0-9]*(\d+\.?\d*)\s*mg[^0-9]*(\d+)\s*horas", text, re.I)
-    if m:
-        f = m.group(1).capitalize(); mg = m.group(2); horas = m.group(3)
-        out.append(f"“Tomar {f} {mg} mg cada {horas} horas” → 1 comprimido cada {horas} h.")
-    return out
-
-def _doc_explain_text(raw_text):
-    text = re.sub(r"\s+", " ", raw_text or "").strip()
-    bullets = _try_extract_numbers(text)
-    if not bullets:
-        bullets = ["No encontré valores claros, pero puedo explicarte términos si escribes el texto literal del documento."]
-    recs = [
-        "✅ No suspendas medicamentos sin indicación profesional.",
-        "✅ Agenda control si los síntomas persisten.",
-        "✅ Aplica medidas de autocuidado cuando corresponda.",
-    ]
-    return bullets, recs
-
-def _doc_prompt_manual(number):
-    return text_Message(number, "Escribe aquí el contenido del documento (ej: “LDL 178 mg/dL, Glicemia 112, Paracetamol 500mg cada 8 horas”).")
-
-def _doc_download_and_ocr(media_id, mime=""):
-    """
-    Stub: aquí podrías implementar la descarga desde Graph API y OCR real.
-    Por ahora retornamos None para forzar el flujo a pedir texto manual si no hay OCR configurado.
-    """
-    return None
-
-def handle_document_flow(text, number, messageId):
-    # Inicio explícito
-    if "explicador de documentos" in text or "explainer" in text or text.strip() == "doc":
-        _doc_set_flow(number, "menu")
-        return _doc_menu(number, messageId)
-
-    # Flujo activo
-    if number in session_states and session_states[number].get("flow") == "doc":
-        step = session_states[number]["step"]
-
-        # Menú -> escoger modo
-        if step == "menu":
-            if text == "doc_foto" or text == "doc_archivo":
-                _doc_set_flow(number, "esperando_archivo")
-                return text_Message(number, "Perfecto. Envíame la *foto o archivo* ahora. Asegúrate de que se vea claro.")
-            elif text == "doc_manual":
-                _doc_set_flow(number, "esperando_texto")
-                return _doc_prompt_manual(number)
-            elif text == "doc_ayuda":
-                return text_Message(
-                    number,
-                    "📎 Consejos para enviar el documento:\n"
-                    "• Usa buena luz y que el texto esté nítido.\n"
-                    "• Si el OCR falla, copia aquí el texto literal.\n\n"
-                    "Luego elige *Tomar una foto*, *Subir un archivo* o *Escribir manualmente*."
-                )
-            else:
-                return text_Message(number, "Puedo ayudarte a subirlo o también puedes *escribirlo manualmente*.")
-
-        # Esperando archivo → llega media
-        if step == "esperando_archivo" and text.startswith("__media_"):
-            if text.startswith("__media_image__:"):
-                media_id = text.split(":")[1]
-                raw = _doc_download_and_ocr(media_id, "image")
-            elif text.startswith("__media_document__:"):
-                payload = text.split(":")[1]
-                media_id, mime = payload.split("|", 1) if "|" in payload else (payload, "")
-                raw = _doc_download_and_ocr(media_id, mime)
-            else:
-                raw = None
-            if not raw:
-                _doc_set_flow(number, "esperando_texto")
-                return text_Message(number, "No pude leer bien el documento. ¿Puedes *escribir* aquí lo que dice?")
-            bullets, recs = _doc_explain_text(raw)
-            session_states[number] = {"flow": "doc", "step": "fin"}
-            body = "🔎 *Explicación en lenguaje claro:*\n• " + "\n• ".join(bullets) + "\n\n"
-            body += "📌 *Recomendaciones:*\n• " + "\n• ".join(recs) + "\n\n"
-            body += "¿Quieres que haga algo más?\n- Agendar hora médica\n- Agregar a recordatorios\n- Consultar síntomas\n- Guardar explicación"
-            return text_Message(number, body)
-
-        # Esperando texto manual
-        if step == "esperando_texto":
-            bullets, recs = _doc_explain_text(text)
-            session_states[number] = {"flow": "doc", "step": "acciones", "buffer": text}
-            body = "🔎 *Explicación en lenguaje claro:*\n• " + "\n• ".join(bullets) + "\n\n"
-            body += "📌 *Recomendaciones:*\n• " + "\n• ".join(recs) + "\n\n"
-            footer = "Explainer – Acciones"
-            opts = ["Agendar hora médica", "Agregar a recordatorios", "Consultar síntomas", "Guardar explicación"]
-            return buttonReply_Message(number, opts, body, footer, "doc_actions", messageId)
-
-        # Acciones finales
-        if step in ("acciones", "fin"):
-            lower = text.lower()
-            if "agendar" in lower:
-                # Lanza flujo de citas
-                session_states.pop(number, None)
-                body = "🗓️ Vamos a agendar tu cita. Selecciona especialidad:"
-                footer = "Agendamiento de Citas"
-                opts = ["🩺 Medicina General","👶 Pediatría","🤰 Ginecología y Obstetricia",
-                        "🧠 Salud Mental","🏋️‍♂️ Kinesiología","🦷 Odontología","➡️ Ver más Especialidades"]
-                return listReply_Message(number, opts, body, footer, "cita_especialidad", messageId)
-            if "recordatorio" in lower:
-                # Arranca flujo de medicamentos y prellena si detectamos alguno
-                meds = re.findall(r"\b(paracetamol|ibuprofeno|amoxicilina)\b\s*\d*mg?", session_states[number].get("buffer",""), re.I)
-                session_states.pop(number, None)
-                if meds:
-                    medication_sessions[number] = {"name": meds[0]}
-                    session_states[number] = {"flow":"med","step":"ask_freq"}
-                    return text_Message(number, f"Configuraré recordatorios para *{meds[0]}*. ¿Con qué frecuencia?")
-                else:
-                    return text_Message(number, "¿Qué medicamento necesitas que recuerde?")
-            if "síntom" in lower or "sintom" in lower:
-                session_states.pop(number, None)
-                return text_Message(number, "Dime *Orientación de Síntomas* para comenzar.")
-            if "guardar" in lower:
-                session_states.pop(number, None)
-                return text_Message(number, "✅ Guardé tu explicación en el historial (simulado).")
-            return text_Message(number, "¿Deseas: *Agendar hora*, *Agregar a recordatorios*, *Consultar síntomas* o *Guardar*?")
-    return None
-
-
-# ========= Recordatorios de citas: DB y scheduler =========
-def _db():
-    return sqlite3.connect(DB_PATH)
-
-def _init_db():
-    with _db() as con:
-        con.execute("""CREATE TABLE IF NOT EXISTS appointments(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            number TEXT, name TEXT, especialidad TEXT, sede TEXT,
-            appt_dt_local TEXT, status TEXT DEFAULT 'pendiente', created_at TEXT
-        )""")
-        con.execute("""CREATE TABLE IF NOT EXISTS reminders(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            appt_id INTEGER, kind TEXT, scheduled_utc TEXT,
-            sent INTEGER DEFAULT 0, sent_at TEXT,
-            FOREIGN KEY(appt_id) REFERENCES appointments(id)
-        )""")
-
-def _schedule_appointment_and_reminders(number, name, especialidad, sede, dt_str):
-    _init_db()
-    # si no hay fecha exacta, no programamos recordatorios
-    if not dt_str or dt_str.lower().startswith("lo antes"):
-        return
-    appt_local = datetime.strptime(dt_str, "%Y-%m-%d %I:%M %p").replace(tzinfo=TZ_CL)
-    with _db() as con:
-        cur = con.execute("""INSERT INTO appointments(number,name,especialidad,sede,appt_dt_local,created_at)
-                             VALUES(?,?,?,?,?,?)""",
-                          (number, name, especialidad, sede,
-                           appt_local.isoformat(), datetime.now(TZ_CL).isoformat()))
-        appt_id = cur.lastrowid
-
-        # 5 días antes (09:00), 1 día antes (19:00), día de la cita (08:00)
-        r1 = (appt_local - timedelta(days=5)).replace(hour=9,  minute=0, second=0, microsecond=0)
-        r2 = (appt_local - timedelta(days=1)).replace(hour=19, minute=0, second=0, microsecond=0)
-        r3 = appt_local.replace(hour=8, minute=0, second=0, microsecond=0)
-
-        for kind, dt_local in [("5d", r1), ("1d", r2), ("0d", r3)]:
-            scheduled_utc = dt_local.astimezone(ZoneInfo("UTC")).isoformat()
-            con.execute("INSERT INTO reminders(appt_id, kind, scheduled_utc) VALUES(?,?,?)",
-                        (appt_id, kind, scheduled_utc))
-
-def _set_appointment_status(appt_id:int, status:str):
-    with _db() as con:
-        con.execute("UPDATE appointments SET status=? WHERE id=?", (status, appt_id))
-
-def _build_reminder_payloads(kind, number, name, especialidad, sede, appt_dt_local, appt_id):
-    fecha = datetime.fromisoformat(appt_dt_local).astimezone(TZ_CL).strftime("%Y-%m-%d")
-    hora  = datetime.fromisoformat(appt_dt_local).astimezone(TZ_CL).strftime("%H:%M")
-    if kind == "5d":
-        body = (f"Hola, te escribe MedicAI para recordarte que tienes una cita el {fecha} a las {hora}, "
-                f"en {sede}.\n¿Deseas confirmar tu asistencia ahora?")
-    elif kind == "1d":
-        body = (f"¡Hola nuevamente! Mañana tienes tu cita:\n"
-                f"📅 {fecha}\n🕐 {hora}\n🏥 {sede}\n\n"
-                f"Por favor confirma si aún puedes asistir:")
-    else:  # 0d
-        body = (f"¡Buen día! Hoy tienes tu cita:\n"
-                f"📅 Hoy\n🕐 {hora}\n🏥 {sede}\n\n"
-                "Llega con 10 minutos de anticipación y lleva tu cédula.")
-
-    sedd = f"cita_recordatorio_{kind}_{appt_id}"
-    return [buttonReply_Message(number, ["Confirmar", "Reprogramar", "Cancelar"],
-                                body, "Recordatorio Cita", sedd, "")]
-
-def send_due_reminders():
-    """Dispara recordatorios pendientes (invocar desde cron o endpoint)."""
-    _init_db()
-    now_utc = datetime.utcnow().replace(tzinfo=ZoneInfo("UTC"))
-    with _db() as con:
-        rows = con.execute("""
-            SELECT r.id, r.kind, a.id, a.number, a.name, a.especialidad, a.sede, a.appt_dt_local
-            FROM reminders r JOIN appointments a ON a.id=r.appt_id
-            WHERE r.sent=0 AND r.scheduled_utc <= ?
-        """, (now_utc.isoformat(),)).fetchall()
-        for rid, kind, appt_id, number, name, esp, sede, appt_dt_local in rows:
-            for payload in _build_reminder_payloads(kind, number, name, esp, sede, appt_dt_local, appt_id):
-                enviar_Mensaje_whatsapp(payload)
-            con.execute("UPDATE reminders SET sent=1, sent_at=? WHERE id=?",
-                        (now_utc.isoformat(), rid))
 
 # -----------------------------------------------------------
 # Función principal del chatbot
 # -----------------------------------------------------------
+
 def administrar_chatbot(text, number, messageId, name):
-    text = (text or "").lower()
+    text = text.lower()
     # 1) marcar leído y reacción inicial
     enviar_Mensaje_whatsapp(markRead_Message(messageId))
     enviar_Mensaje_whatsapp(replyReaction_Message(number, messageId, "🩺"))
+    
 
-    # 2) Mapeo de IDs de botones (button_reply) y filas de lista (list_reply)
+# 2) Mapeo de IDs de botones (button_reply) y filas de lista (list_reply)
     ui_mapping = {
-        # Menú principal (máx 3 botones)
+        # ----- Guía de Ruta: mapeo de listas/botones -----
+        # Selección de tipo de documento
+        "route_type_row_1": "interconsulta",
+        "route_type_row_2": "examenes",
+        "route_type_row_3": "receta",
+        "route_type_row_4": "derivacion_urgente",
+        "route_type_row_5": "no_seguro",
+
+        # Pregunta GES
+        "route_ges_row_1": "ges_si",
+        "route_ges_row_2": "ges_no",
+        "route_ges_row_3": "ges_ns",
+
+        # Botones auxiliares del flujo
+        "route_exams_fast_btn_1": "ayuno_si",
+        "route_exams_fast_btn_2": "ayuno_no",
+
+        "route_rx_btn_1": "rx_recordatorios_si",
+        "route_rx_btn_2": "rx_recordatorios_no",
+
+        "route_urgent_btn_1": "urgent_sapu_si",
+        "route_urgent_btn_2": "urgent_sapu_no",
+
+        "route_save_btn_1": "guardar_si",
+        "route_save_btn_2": "guardar_no",
+
+        "route_some_site_btn_1": "sede_si",
+        "route_some_site_btn_2": "sede_no",
+
+        "route_ges_reminder_btn_1": "ges_reminder_si",
+        "route_ges_reminder_btn_2": "ges_reminder_no",
+
+        "route_close_btn_1": "cerrar_guardar_si",
+        "route_close_btn_2": "cerrar_guardar_no",
+
+        # Menú principal
         "menu_principal_btn_1": "agendar cita",
         "menu_principal_btn_2": "recordatorio de medicamento",
         "menu_principal_btn_3": "orientación de síntomas",
 
-        # Explainer – menú de ingreso
-        "doc_menu_row_1": "doc_foto",
-        "doc_menu_row_2": "doc_archivo",
-        "doc_menu_row_3": "doc_manual",
-        "doc_menu_row_4": "doc_ayuda",
-
-        # Especialidades – pág. 1
+        # Especialidades – página 1
         "cita_especialidad_row_1": "medicina general",
         "cita_especialidad_row_2": "pediatría",
         "cita_especialidad_row_3": "ginecología y obstetricia",
@@ -1463,7 +1314,7 @@ def administrar_chatbot(text, number, messageId, name):
         "cita_especialidad_row_6": "odontología",
         "cita_especialidad_row_7": "➡️ ver más especialidades",
 
-        # Especialidades – pág. 2
+        # Especialidades – página 2 (hasta 10 filas)
         "cita_especialidad2_row_1":  "oftalmología",
         "cita_especialidad2_row_2":  "dermatología",
         "cita_especialidad2_row_3":  "traumatología",
@@ -1475,7 +1326,7 @@ def administrar_chatbot(text, number, messageId, name):
         "cita_especialidad2_row_9":  "neurología",
         "cita_especialidad2_row_10": "➡️ mostrar más…",
 
-        # Especialidades – pág. 3
+        # Especialidades – página 3 (hasta 10 filas)
         "cita_especialidad3_row_1":  "gastroenterología",
         "cita_especialidad3_row_2":  "endocrinología",
         "cita_especialidad3_row_3":  "urología",
@@ -1504,7 +1355,7 @@ def administrar_chatbot(text, number, messageId, name):
         "cita_confirmacion_btn_1": "cita_confirmacion:si",
         "cita_confirmacion_btn_2": "cita_confirmacion:no",
 
-        # Orientación de síntomas – pág. 1
+        # Orientación de síntomas – página 1
         "orientacion_categorias_row_1":  "orientacion_respiratorio_extraccion",
         "orientacion_categorias_row_2":  "orientacion_bucal_extraccion",
         "orientacion_categorias_row_3":  "orientacion_infeccioso_extraccion",
@@ -1516,27 +1367,264 @@ def administrar_chatbot(text, number, messageId, name):
         "orientacion_categorias_row_9":  "orientacion_dermatologico_extraccion",
         "orientacion_categorias_row_10": "ver más ➡️",
 
-        # Orientación de síntomas – pág. 2
+        # Orientación de síntomas – página 2
         "orientacion_categorias2_row_1": "orientacion_ginecologico_extraccion",
         "orientacion_categorias2_row_2": "orientacion_digestivo_extraccion",
     }
 
+    # -----------------------------------------------------------
+    # 4.bis) MICRO: Guía de Ruta / Derivaciones
+    # -----------------------------------------------------------
+    # Disparadores por keyword (WhatsApp texto)
+    if "guía de ruta" in text or "guia de ruta" in text or "derivación" in text or "derivacion" in text or "ruta de atención" in text:
+        list_responses.append(start_route_flow(number, messageId))
+
+    # Si el usuario ya está dentro del flujo
+    elif number in route_sessions:
+        st = route_sessions[number]
+        step = st.get("step")
+
+        # Paso: elegir tipo
+        if step == "choose_type":
+            if text == "interconsulta":
+                st["doc_type"] = "interconsulta"
+                list_responses.append(text_Message(number, "Perfecto. Recibiste una *interconsulta médica*."))
+                list_responses.append(ask_ges(number, messageId))
+
+            elif text == "examenes":
+                st["doc_type"] = "examenes"
+                st["step"] = "exams"
+                list_responses.append(text_Message(number, exams_steps()))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, ver ayuno", "No, gracias"],
+                        "¿Tu examen requiere ayuno?",
+                        "Orden de exámenes",
+                        "route_exams_fast",
+                        messageId
+                    )
+                )
+
+            elif text == "receta":
+                st["doc_type"] = "receta"
+                st["step"] = "rx"
+                list_responses.append(text_Message(
+                    number,
+                    "💊 Detecté *receta/indicaciones*. ¿Configuro recordatorios de tomas?"
+                ))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, configurar", "No, gracias"],
+                        "Adherencia terapéutica",
+                        "Receta",
+                        "route_rx",
+                        messageId
+                    )
+                )
+
+            elif text == "derivacion_urgente":
+                st["doc_type"] = "derivacion_urgente"
+                st["step"] = "urgent"
+                list_responses.append(text_Message(number, urgent_referral_steps()))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, indicar SAPU", "No por ahora"],
+                        "Derivación urgente",
+                        "Guía de Ruta",
+                        "route_urgent",
+                        messageId
+                    )
+                )
+
+            else:
+                st["doc_type"] = "no_seguro"
+                st["step"] = "requirements"
+                list_responses.append(text_Message(number, "No te preocupes. Te dejo *requisitos y pasos* útiles:"))
+                list_responses.append(text_Message(number, req_docs_steps()))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, guardar", "No, gracias"],
+                        "Guardar / Recordatorios",
+                        "Guía de Ruta",
+                        "route_save",
+                        messageId
+                    )
+                )
+
+        # Paso: pregunta GES
+        elif step == "ask_ges":
+            if text == "ges_si":
+                st["ges"] = "sí"
+                list_responses.append(text_Message(number, interconsulta_instructions("Sí, es GES")))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, recordarme GES", "No, gracias"],
+                        "Recordatorios",
+                        "Interconsulta GES",
+                        "route_ges_reminder",
+                        messageId
+                    )
+                )
+                st["step"] = "requirements"
+
+            elif text == "ges_no" or text == "ges_ns":
+                st["ges"] = "no/nd"
+                list_responses.append(text_Message(number, interconsulta_instructions("No")))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, indicar sede", "No, gracias"],
+                        "SOME CESFAM",
+                        "Interconsulta",
+                        "route_some_site",
+                        messageId
+                    )
+                )
+                st["step"] = "requirements"
+
+            else:
+                # Respuesta libre: tratamos como no sabe
+                st["ges"] = "nd"
+                list_responses.append(text_Message(number, interconsulta_instructions("No")))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, indicar sede", "No, gracias"],
+                        "SOME CESFAM",
+                        "Interconsulta",
+                        "route_some_site",
+                        messageId
+                    )
+                )
+                st["step"] = "requirements"
+
+        # Paso: exámenes -> ayuno sí/no
+        elif step == "exams":
+            if text == "ayuno_si":
+                list_responses.append(text_Message(
+                    number,
+                    "Tip general: muchos perfiles requieren *8–12 h* de ayuno (verifica en tu orden o SOME)."
+                ))
+            else:
+                list_responses.append(text_Message(
+                    number,
+                    "Ok. Si dudas, confírmalo al agendar en SOME/laboratorio."
+                ))
+            st["step"] = "requirements"
+            list_responses.append(text_Message(number, req_docs_steps()))
+            list_responses.append(
+                buttonReply_Message(
+                    number,
+                    ["Sí, guardar", "No, gracias"],
+                    "Guardar / Recordatorios",
+                    "Guía de Ruta",
+                    "route_save",
+                    messageId
+                )
+            )
+
+        # Paso: receta -> puente a adherencia
+        elif step == "rx":
+            if text == "rx_recordatorios_si":
+                list_responses.append(text_Message(
+                    number,
+                    "Perfecto. Para configurarlos escribe: *recordatorio de medicamento*."
+                ))
+            else:
+                list_responses.append(text_Message(
+                    number,
+                    "Entendido. Si más tarde quieres recordatorios, escribe: *recordatorio de medicamento*."
+                ))
+            st["step"] = "close"
+            list_responses.append(
+                buttonReply_Message(
+                    number,
+                    ["Sí, guardar", "No, gracias"],
+                    "Guardar / Recordatorios",
+                    "Guía de Ruta",
+                    "route_close",
+                    messageId
+                )
+            )
+
+        # Paso: urgente
+        elif step == "urgent":
+            if text == "urgent_sapu_si":
+                list_responses.append(text_Message(
+                    number,
+                    "Envíame tu *comuna o dirección aproximada* y te indico el SAPU más cercano."
+                ))
+            else:
+                list_responses.append(text_Message(
+                    number,
+                    "Recuerda: en una urgencia, acude *de inmediato* o llama al 131."
+                ))
+            st["step"] = "requirements"
+            list_responses.append(text_Message(number, req_docs_steps()))
+            list_responses.append(
+                buttonReply_Message(
+                    number,
+                    ["Sí, guardar", "No, gracias"],
+                    "Guardar / Recordatorios",
+                    "Guía de Ruta",
+                    "route_save",
+                    messageId
+                )
+            )
+
+        # Paso: guardar/cerrar
+        elif step in ("requirements", "close"):
+            if text in ("guardar_si", "cerrar_guardar_si", "ges_reminder_si", "sede_si"):
+                list_responses.append(text_Message(
+                    number,
+                    "✅ Guardado. Puedo recordarte revisar SOME o el estado de tu interconsulta/derivación cuando lo indiques."
+                ))
+            else:
+                list_responses.append(text_Message(
+                    number,
+                    "Listo. Si necesitas volver a la *Guía de Ruta*, escribe: *guía de ruta*."
+                ))
+            route_sessions.pop(number, None)
+
+        # Paso: guardar/cerrar
+        elif step in ("requirements", "close"):
+            if text in ("guardar_si", "cerrar_guardar_si", "ges_reminder_si", "sede_si"):
+                list_responses.append(text_Message(
+                    number,
+                    "✅ Guardado. Puedo recordarte revisar SOME o el estado de tu interconsulta/derivación cuando lo indiques."
+                ))
+            else:
+                list_responses.append(text_Message(
+                    number,
+                    "Listo. Si necesitas volver a la *Guía de Ruta*, escribe: *guía de ruta*."
+                ))
+            route_sessions.pop(number, None)
+
+
     datetime_mapping = {
-        "cita_datetime_row_1": "2025-04-18 10:00 AM",
-        "cita_datetime_row_2": "2025-04-18 11:30 AM",
-        "cita_datetime_row_3": "2025-04-18 02:00 PM",
-        "cita_datetime_row_4": "2025-04-19 09:00 AM",
-        "cita_datetime_row_5": "2025-04-19 03:00 PM",
-        "cita_datetime_row_6": "2025-04-20 10:00 AM",
-        "cita_datetime_row_7": "2025-04-20 01:00 PM",
-        "cita_datetime_row_8": "2025-04-21 09:30 AM",
-        "cita_datetime_row_9": "2025-04-21 11:00 AM",
-        "cita_datetime_row_10":"2025-04-21 02:30 PM",
+    "cita_datetime_row_1": "2025-04-18 10:00 AM",
+    "cita_datetime_row_2": "2025-04-18 11:30 AM",
+    "cita_datetime_row_3": "2025-04-18 02:00 PM",
+    "cita_datetime_row_4": "2025-04-19 09:00 AM",
+    "cita_datetime_row_5": "2025-04-19 03:00 PM",
+    "cita_datetime_row_6": "2025-04-20 10:00 AM",
+    "cita_datetime_row_7": "2025-04-20 01:00 PM",
+    "cita_datetime_row_8": "2025-04-21 09:30 AM",
+    "cita_datetime_row_9": "2025-04-21 11:00 AM",
+    "cita_datetime_row_10":"2025-04-21 02:30 PM",
     }
 
     # Normalizar y mapear IDs de UI
     if text in ui_mapping:
         text = ui_mapping[text]
+
+
+
 
     # 4) flujo de orientación activo (solo orientación de síntomas)
     if number in session_states and 'categoria' in session_states[number]:
@@ -1575,8 +1663,7 @@ def administrar_chatbot(text, number, messageId, name):
         "Lo siento, no entendí tu consulta. Puedes elegir:\n"
         "• Agendar Cita Médica\n"
         "• Recordatorio de Medicamento\n"
-        "• Orientación de Síntomas\n"
-        "• Explainer de Documentos (escribe *doc*)"
+        "• Orientación de Síntomas"
         + disclaimer
     )
 
@@ -1601,8 +1688,7 @@ def administrar_chatbot(text, number, messageId, name):
             "¿En qué puedo ayudarte?\n"
             "1️⃣ Agendar Cita Médica\n"
             "2️⃣ Recordatorio de Medicamento\n"
-            "3️⃣ Orientación de Síntomas\n"
-            "📝 También puedo *explicar documentos médicos* (escribe *doc*)."
+            "3️⃣ Orientación de Síntomas"
         )
         footer = "MedicAI"
         opts = [
@@ -1613,191 +1699,152 @@ def administrar_chatbot(text, number, messageId, name):
         list_responses.append(
             buttonReply_Message(number, opts, body, footer, "menu_principal", messageId)
         )
-        # Extra: lista para Explainer (opcional, los botones son máx 3)
-        list_responses.append(_doc_menu(number, messageId))
         list_responses.append(
             replyReaction_Message(number, messageId, random.choice(emojis_saludo))
         )
 
-    # ====== EXPLAINER: entrada rápida ======
-    elif "explicador de documentos" in text or "explainer" in text or text.strip() == "doc":
-        payload = handle_document_flow("explicador de documentos", number, messageId)
-        if payload: list_responses.append(payload)
-
-    # ====== EXPLAINER: flujo activo o recepción de media ======
-    elif number in session_states and session_states[number].get("flow") == "doc":
-        payload = handle_document_flow(text, number, messageId)
-        if payload: list_responses.append(payload)
-
-    elif text.startswith("__media_"):
-        payload = handle_document_flow(text, number, messageId)
-        if payload: list_responses.append(payload)
-
-    # -----------------------------------------------------------
-    # 3) Flujo: Agendar Citas
-    # -----------------------------------------------------------
+     # -----------------------------------------------------------
+     # 3) Flujo: Agendar Citas
+     # -----------------------------------------------------------
     elif "agendar cita" in text or "cita médica" in text:
-        appointment_sessions[number] = {}
-        body = "🗓️ ¡Perfecto! Selecciona el tipo de atención que necesitas:"
-        footer = "Agendamiento de Citas"
-        opts = [
-            "🩺 Medicina General",
-            "👶 Pediatría",
-            "🤰 Ginecología y Obstetricia",
-            "🧠 Salud Mental",
-            "🏋️‍♂️ Kinesiología",
-            "🦷 Odontología",
-            "➡️ Ver más Especialidades"
-        ]
-        list_responses.append(
-            listReply_Message(number, opts, body, footer, "cita_especialidad", messageId)
-        )
+         appointment_sessions[number] = {}                       # ← MOD: inicializo estado de cita
+         body = "🗓️ ¡Perfecto! Selecciona el tipo de atención que necesitas:"
+         footer = "Agendamiento de Citas"
+         opts = [
+             "🩺 Medicina General",
+             "👶 Pediatría",
+             "🤰 Ginecología y Obstetricia",
+             "🧠 Salud Mental",
+             "🏋️‍♂️ Kinesiología",
+             "🦷 Odontología",
+             "➡️ Ver más Especialidades"
+         ]
+         list_responses.append(
+             listReply_Message(number, opts, body, footer, "cita_especialidad", messageId)
+         )
 
+     # 3.1) Listado interactivo de especialidades (página 2)
     elif text == "➡️ ver más especialidades":
-        body = "🔍 Otras especialidades – selecciona una opción:"
-        footer = "Agendamiento – Especialidades"
-        opts2 = [
-            "👁️ Oftalmología", "🩸 Dermatología", "🦴 Traumatología",
-            "❤️ Cardiología", "🥗 Nutrición y Dietética", "🗣️ Fonoaudiología",
-            "🏥 Medicina Interna", "🔧 Reumatología", "🧠 Neurología",
-            "➡️ mostrar más…"
-        ]
-        list_responses.append(
-            listReply_Message(number, opts2, body, footer, "cita_especialidad2", messageId)
-        )
+         body = "🔍 Otras especialidades – selecciona una opción:"
+         footer = "Agendamiento – Especialidades"
+         opts2 = [
+             "👁️ Oftalmología", "🩸 Dermatología", "🦴 Traumatología",
+             "❤️ Cardiología", "🥗 Nutrición y Dietética", "🗣️ Fonoaudiología",
+             "🏥 Medicina Interna", "🔧 Reumatología", "🧠 Neurología",
+             "➡️ mostrar más…"
+         ]
+         list_responses.append(
+             listReply_Message(number, opts2, body, footer, "cita_especialidad2", messageId)
+         )
 
+     # 3.1.1) Paginación: tercera página de especialidades
     elif text == "➡️ mostrar más…":
-        body = "🔍 Más especialidades – selecciona una opción:"
-        footer = "Agendamiento – Especialidades"
-        opts3 = [
-            "🍽️ Gastroenterología", "🧬 Endocrinología", "🚻 Urología",
-            "🦠 Infectología", "🌿 Terapias Complementarias", "🧪 Toma de Muestras",
-            "👶 Vacunación / Niño Sano", "🏠 Atención Domiciliaria",
-            "💻 Telemedicina", "❓ Otro / No sé"
-        ]
-        list_responses.append(
-            listReply_Message(number, opts3, body, footer, "cita_especialidad3", messageId)
-        )
+         body = "🔍 Más especialidades – selecciona una opción:"
+         footer = "Agendamiento – Especialidades"
+         opts3 = [
+             "🍽️ Gastroenterología", "🧬 Endocrinología", "🚻 Urología",
+             "🦠 Infectología", "🌿 Terapias Complementarias", "🧪 Toma de Muestras",
+             "👶 Vacunación / Niño Sano", "🏠 Atención Domiciliaria",
+             "💻 Telemedicina", "❓ Otro / No sé"
+         ]
+         list_responses.append(
+             listReply_Message(number, opts3, body, footer, "cita_especialidad3", messageId)
+         )
 
+     # 3.2) Tras elegir especialidad
     elif text in [
-        "medicina general", "pediatría", "ginecología y obstetricia", "salud mental",
-        "kinesiología", "odontología", "oftalmología", "dermatología",
-        "traumatología", "cardiología", "nutrición y dietética", "fonoaudiología",
-        "medicina interna", "reumatología", "neurología", "gastroenterología",
-        "endocrinología", "urología", "infectología", "terapias complementarias",
-        "toma de muestras", "vacunación / niño sano", "atención domiciliaria",
-        "telemedicina", "otro", "no sé"
-    ]:
-        appointment_sessions[number]['especialidad'] = text
-        body = "⏰ ¿Tienes preferencia de día y hora para tu atención?"
-        footer = "Agendamiento – Fecha y Hora"
-        opts = ["📅 Elegir Fecha y Hora", "⚡ Lo antes posible"]
-        list_responses.append(
-            buttonReply_Message(number, opts, body, footer, "cita_fecha", messageId)
-        )
+         "medicina general", "pediatría", "ginecología y obstetricia", "salud mental",
+         "kinesiología", "odontología", "oftalmología", "dermatología",
+         "traumatología", "cardiología", "nutrición y dietética", "fonoaudiología",
+         "medicina interna", "reumatología", "neurología", "gastroenterología",
+         "endocrinología", "urología", "infectología", "terapias complementarias",
+         "toma de muestras", "vacunación / niño sano", "atención domiciliaria",
+         "telemedicina", "otro", "no sé"
+     ]:
+         appointment_sessions[number]['especialidad'] = text       # ← MOD: guardo especialidad
+         body = "⏰ ¿Tienes preferencia de día y hora para tu atención?"
+         footer = "Agendamiento – Fecha y Hora"
+         opts = ["📅 Elegir Fecha y Hora", "⚡ Lo antes posible"]
+         list_responses.append(
+             buttonReply_Message(number, opts, body, footer, "cita_fecha", messageId)
+         )
 
+     # 3.3a) Si elige “Elegir fecha y hora”
     elif text == "elegir fecha y hora":
-        body   = "Por favor selecciona fecha y hora para tu cita:"
-        footer = "Agendamiento – Fecha y Hora"
-        opciones = list(datetime_mapping.values())
-        list_responses.append(
-            listReply_Message(number, opciones, body, footer, "cita_datetime", messageId)
-        )
+         body   = "Por favor selecciona fecha y hora para tu cita:"
+         footer = "Agendamiento – Fecha y Hora"
+         opciones = list(datetime_mapping.values())
+         list_responses.append(
+             listReply_Message(number, opciones, body, footer, "cita_datetime", messageId)
+         )
 
+     # 3.3b) Si elige “Lo antes posible”
     elif text == "lo antes posible":
-        appointment_sessions[number]['datetime'] = "Lo antes posible"
-        body   = "¿Atenderás en la misma sede de siempre?"
-        footer = "Agendamiento – Sede"
-        opts   = ["Sí", "No, cambiar de sede"]
-        list_responses.append(
-            buttonReply_Message(number, opts, body, footer, "cita_sede", messageId)
-        )
+         appointment_sessions[number]['datetime'] = "Lo antes posible"  # ← MOD: guardo genérico
+         body   = "¿Atenderás en la misma sede de siempre?"
+         footer = "Agendamiento – Sede"
+         opts   = ["Sí", "No, cambiar de sede"]
+         list_responses.append(
+             buttonReply_Message(number, opts, body, footer, "cita_sede", messageId)
+         )
 
+     # 3.4) Tras escoger fecha/hora de calendario
     elif text.startswith("cita_datetime_row_"):
-        selected = datetime_mapping.get(text)
-        appointment_sessions[number]['datetime'] = selected
-        body     = f"Has seleccionado *{selected}*. ¿Atenderás en la misma sede de siempre?"
-        footer   = "Agendamiento – Sede"
-        opts     = ["Sí", "No, cambiar de sede"]
-        list_responses.append(
-            buttonReply_Message(number, opts, body, footer, "cita_sede", messageId)
-        )
+         selected = datetime_mapping.get(text)
+         appointment_sessions[number]['datetime'] = selected       # ← MOD: guardo fecha exacta
+         body     = f"Has seleccionado *{selected}*. ¿Atenderás en la misma sede de siempre?"
+         footer   = "Agendamiento – Sede"
+         opts     = ["Sí", "No, cambiar de sede"]
+         list_responses.append(
+             buttonReply_Message(number, opts, body, footer, "cita_sede", messageId)
+         )
 
+     # 3.5) Cambio de sede
     elif text == "no, cambiar de sede":
-        body   = "Selecciona tu nueva sede:\n• Sede Talca\n• Sede Curicó\n• Sede Linares"
-        footer = "Agendamiento – Nueva Sede"
-        opts   = ["Sede Talca", "Sede Curicó", "Sede Linares"]
-        list_responses.append(
-            listReply_Message(number, opts, body, footer, "cita_nueva_sede", messageId)
-        )
+         body   = "Selecciona tu nueva sede:\n• Sede Talca\n• Sede Curicó\n• Sede Linares"
+         footer = "Agendamiento – Nueva Sede"
+         opts   = ["Sede Talca", "Sede Curicó", "Sede Linares"]
+         list_responses.append(
+             listReply_Message(number, opts, body, footer, "cita_nueva_sede", messageId)
+         )
 
+     # 3.6) Confirmación final
     elif text in ["sede talca", "sede curicó", "sede linares"]:
-        appointment_sessions[number]['sede'] = text
-        esp  = appointment_sessions[number]['especialidad'].capitalize()
-        dt   = appointment_sessions[number].get('datetime', 'día y hora')
-        sede = appointment_sessions[number]['sede'].capitalize()
-        if " " in dt:
-            fecha, hora = dt.split(" ", 1)
-            horario = f"{fecha} a las {hora}"
-        else:
-            horario = dt
-        body = (
-            f"¡Listo! Tu cita ha sido agendada para el *{horario}*, "
-            f"en *{esp}*, en la sede *{sede}*.\n\n"
-            "¿Deseas que te envíe un recordatorio el día anterior?"
-        )
-        footer = "Agendamiento – Confirmación Final"
-        opts   = ["Sí", "No"]
-        list_responses.append(
-            buttonReply_Message(number, opts, body, footer, "cita_confirmacion", messageId)
-        )
+         appointment_sessions[number]['sede'] = text             # ← MOD: guardo sede
+         esp  = appointment_sessions[number]['especialidad'].capitalize()
+         dt   = appointment_sessions[number].get('datetime', 'día y hora')
+         sede = appointment_sessions[number]['sede'].capitalize()
+         # formateo fecha y hora si vienen como "YYYY-MM-DD HH:MM"
+         if " " in dt:
+             fecha, hora = dt.split(" ", 1)
+             horario = f"{fecha} a las {hora}"
+         else:
+             horario = dt
+         body = (
+             f"¡Listo! Tu cita ha sido agendada para el *{horario}*, "
+             f"en *{esp}*, en la sede *{sede}*.\n\n"
+             "¿Deseas que te envíe un recordatorio el día anterior?"
+         )
+         footer = "Agendamiento – Confirmación Final"
+         opts   = ["Sí", "No"]
+         list_responses.append(
+             buttonReply_Message(number, opts, body, footer, "cita_confirmacion", messageId)
+         )
 
+     # 3.7) Respuesta al recordatorio y cierre
     elif text.startswith("cita_confirmacion"):
-        if ":si" in text:
-            list_responses.append(text_Message(number, "¡Todo listo! Gracias por confiar en MedicAI 🩺✨"))
-            try:
-                st   = appointment_sessions.get(number, {})
-                esp  = st.get('especialidad', '')
-                sede = st.get('sede', '')
-                dt   = st.get('datetime', '')
-                _schedule_appointment_and_reminders(number, name, esp, sede, dt)
-            except Exception as e:
-                print("Error al agendar recordatorios:", e)
-        else:
-            list_responses.append(text_Message(number, "Entendido. Si necesitas reagendar, dime *Agendar Cita*."))
-        appointment_sessions.pop(number, None)
+         body = "¡Todo listo! Gracias por confiar en MedicAI 🩺✨"
+         list_responses.append(text_Message(number, body))
+         appointment_sessions.pop(number, None)                  # ← MOD: limpio estado de cita
 
-    # ====== Acciones desde recordatorios programados ======
-    elif text.startswith("cita_recordatorio_") and text.endswith("_btn_1"):
-        try:
-            appt_id = int(text.split("_")[3])
-            _set_appointment_status(appt_id, "confirmada")
-        except Exception:
-            pass
-        list_responses.append(text_Message(number, "✅ ¡Gracias! Dejé tu cita como *confirmada*."))
 
-    elif text.startswith("cita_recordatorio_") and text.endswith("_btn_2"):
-        list_responses.append(text_Message(number, "De acuerdo, vamos a *reprogramar* tu cita."))
-        body = "🗓️ Elige especialidad para reagendar:"
-        footer = "Agendamiento de Citas"
-        opts = [
-            "🩺 Medicina General","👶 Pediatría","🤰 Ginecología y Obstetricia",
-            "🧠 Salud Mental","🏋️‍♂️ Kinesiología","🦷 Odontología","➡️ Ver más Especialidades"
-        ]
-        list_responses.append(listReply_Message(number, opts, body, footer, "cita_especialidad", messageId))
-
-    elif text.startswith("cita_recordatorio_") and text.endswith("_btn_3"):
-        try:
-            appt_id = int(text.split("_")[3])
-            _set_appointment_status(appt_id, "cancelada")
-        except Exception:
-            pass
-        list_responses.append(text_Message(number, "🗑️ Tu cita se marcó como *cancelada*. Si quieres agendar otra, dime *Agendar Cita*."))
-
+     # -----------------------------------------------------------
+    # 4) Flujo de Recordatorio y Monitoreo de Medicamentos
     # -----------------------------------------------------------
-    # 4) Recordatorio y Monitoreo de Medicamentos
-    # -----------------------------------------------------------
+
+    # 4.1) Inicio de nueva sesión de recordatorio
     elif "recordatorio de medicamento" in text:
+        # Inicializar estado de recordatorio
         medication_sessions[number] = {}
         session_states[number]   = {"flow": "med", "step": "ask_name"}
 
@@ -1807,11 +1854,13 @@ def administrar_chatbot(text, number, messageId, name):
         )
         list_responses.append(text_Message(number, body))
 
+    # 4.2) Continuar el flujo de recordatorio existente
     elif number in session_states and session_states[number].get("flow") == "med":
         flow = session_states[number]
         step = flow["step"]
 
         if step == "ask_name":
+            # Guardar nombre del medicamento
             medication_sessions[number]["name"] = text
             flow["step"] = "ask_freq"
 
@@ -1822,6 +1871,7 @@ def administrar_chatbot(text, number, messageId, name):
                 "Cada 8 horas",
                 "Otro horario personalizado"
             ]
+            # Usamos lista en lugar de botones para permitir 4 opciones
             list_responses.append(
                 listReply_Message(
                     number,
@@ -1834,6 +1884,7 @@ def administrar_chatbot(text, number, messageId, name):
             )
 
         elif step == "ask_freq":
+            # Guardar frecuencia
             medication_sessions[number]["freq"] = text
             flow["step"] = "ask_times"
 
@@ -1844,6 +1895,7 @@ def administrar_chatbot(text, number, messageId, name):
             list_responses.append(text_Message(number, body))
 
         elif step == "ask_times":
+            # Guardar horarios y cerrar flujo
             medication_sessions[number]["times"] = text
             med   = medication_sessions[number]["name"]
             times = medication_sessions[number]["times"]
@@ -1855,6 +1907,7 @@ def administrar_chatbot(text, number, messageId, name):
             list_responses.append(text_Message(number, body))
             session_states.pop(number, None)
 
+            
     # 5) Inicio de orientación de síntomas
     elif "orientación de síntomas" in text or "orientacion de sintomas" in text:
         body = "Selecciona categoría de Enfermedades:"
@@ -1876,7 +1929,8 @@ def administrar_chatbot(text, number, messageId, name):
         )
         return
 
-    elif text == "ver más ➡️":
+    # 5.1) Paginación: si el usuario elige "Ver más ➡️", mostramos las categorías adicionales
+    elif text == "Ver más ➡️":
         opts2 = [
             "Ginecológicas 👩‍⚕️",
             "Digestivas 🍽️",
@@ -1887,6 +1941,8 @@ def administrar_chatbot(text, number, messageId, name):
         )
         return
 
+
+    # 6) Usuario selecciona categoría: arrancamos orientación
     elif text.startswith("orientacion_") and text.endswith("_extraccion"):
         _, categoria, _ = text.split("_", 2)
         session_states[number] = {"categoria": categoria, "paso": "extraccion"}
@@ -1917,6 +1973,7 @@ def administrar_chatbot(text, number, messageId, name):
         enviar_Mensaje_whatsapp(text_Message(number, prompt))
         return
 
+    # 7) Agradecimientos y despedidas
     elif any(w in text for w in ["gracias", "muchas gracias"]):
         list_responses.append(text_Message(number, random.choice(agradecimientos)))
         list_responses.append(replyReaction_Message(number, messageId, random.choice(reacciones_ack)))
@@ -1925,6 +1982,7 @@ def administrar_chatbot(text, number, messageId, name):
         list_responses.append(text_Message(number, random.choice(despedidas)))
         list_responses.append(replyReaction_Message(number, messageId, "👋"))
 
+    # 8) Default
     else:
         list_responses.append(text_Message(number, respuesta_no_entendido))
         list_responses.append(replyReaction_Message(number, messageId, "❓"))
