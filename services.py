@@ -1631,6 +1631,12 @@ def administrar_chatbot(text, number, messageId, name):
     triggers_route = ["guia de ruta", "ruta de atencion", "derivacion"]
     if any(trigger in text for trigger in triggers_route):
         list_responses.append(start_route_flow(number, messageId))
+        for i, payload in enumerate(list_responses):
+            if payload and payload.strip():
+                enviar_Mensaje_whatsapp(payload)
+            if i < len(list_responses) - 1:
+                time.sleep(0.2)
+        return
 
     datetime_mapping = {
     "cita_datetime_row_1": "2025-04-18 10:00 AM",
@@ -1722,9 +1728,9 @@ def administrar_chatbot(text, number, messageId, name):
         body = (
             f"👋 ¡Hola {name}! Soy *MedicAI*, tu asistente virtual.\n\n"
             "¿En qué puedo ayudarte?\n"
-            "1️⃣ Agendar Cita Médica\n"
-            "2️⃣ Recordatorio de Medicamento\n"
-            "3️⃣ Más opciones"
+            "1️⃣ *Agendar Cita Médica* – reservas por especialidad y sede\n"
+            "2️⃣ *Recordatorio de Medicamento* – horarios y adherencia\n"
+            "3️⃣ *Más opciones* – guía de ruta/derivaciones, explicación de documentos, stock de fármacos y seguimiento\n"
         )
         footer = "MedicAI"
         opts = [
@@ -1744,11 +1750,11 @@ def administrar_chatbot(text, number, messageId, name):
         body = "Más opciones de ayuda:"
         footer = "MedicAI"
         opciones_mas = [
-            "🩺 Orientación de Síntomas",
-            "🧾 Guía de Ruta / Derivaciones",
-            "📄 Explicador de Documentos",
-            "💊 Stock de Medicamentos",
-            "🧭 Derivaciones / Seguimiento"
+            "🩺 Orientación de Síntomas — evaluación preliminar y recomendaciones",
+            "🧾 Guía de Ruta / Derivaciones — pasos en SOME, GES y urgencias",
+            "📄 Explicador de Documentos — interpreta recetas, exámenes e interconsultas",
+            "💊 Stock de Medicamentos — disponibilidad y alternativas genéricas",
+            "🧭 Derivaciones / Seguimiento — estado de interconsultas, exámenes y citas"
         ]
         list_responses.append(
             listReply_Message(number, opciones_mas, body, footer, "menu_mas", messageId)
