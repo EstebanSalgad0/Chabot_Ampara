@@ -4,12 +4,23 @@ import json
 import time
 import random
 import unicodedata
+import threading
+from datetime import datetime
 
 def normalize_text(t: str) -> str:
     t = t.lower()
     t = ''.join(c for c in unicodedata.normalize('NFD', t)
                 if unicodedata.category(c) != 'Mn')
     return t
+
+# ===== Recordatorios en memoria (medicación) =====
+MED_REMINDERS = {}          # { number: [ { "name": str, "times": set(["08:00","20:00"]), "last": "" }, ... ] }
+REMINDERS_LOCK = threading.Lock()
+
+TEST_MODE = True            # ← pon True para pruebas rápidas
+CHECK_INTERVAL = 5 if TEST_MODE else 60   # cada 5s en test, 60s en prod
+
+_scheduler_started = False
 
 # -----------------------------------------------------------
 # Estado para Guía de Ruta / Derivaciones
@@ -361,6 +372,85 @@ def markRead_Message(messageId):
         "status": "read",
         "message_id": messageId
     })
+
+
+# ===== SISTEMA DE RECORDATORIOS =====
+
+def _reminder_scheduler_loop():
+    """Hilo que verifica cada CHECK_INTERVAL si hay alarmas para enviar."""
+    while True:
+        try:
+            now = datetime.now().strftime("%H:%M")   # resolución de minuto
+            with REMINDERS_LOCK:
+                # Recorre todos los números
+                for number, items in list(MED_REMINDERS.items()):
+                    for r in items:
+                        # Si coincide la hora y no se envió ya en este minuto
+                        if now in r["times"] and r.get("last") != now:
+                            med_name = r["name"]
+                            msg = (
+                                f"⏰ *Recordatorio de medicamento*\n"
+                                f"Es hora de tomar: *{med_name}*."
+                            )
+                            try:
+                                enviar_Mensaje_whatsapp(text_Message(number, msg))
+                            except Exception as e:
+                                print(f"[reminder] error al enviar: {e}")
+                            r["last"] = now
+        except Exception as e:
+            print(f"[reminder-loop] excepción: {e}")
+        finally:
+            time.sleep(CHECK_INTERVAL)
+
+
+def _start_reminder_scheduler_once():
+    """Arranca el hilo del scheduler una sola vez."""
+    global _scheduler_started
+    if _scheduler_started:
+        return
+    t = threading.Thread(target=_reminder_scheduler_loop, daemon=True)
+    t.start()
+    _scheduler_started = True
+
+
+def register_medication_reminder(number, med_name, times_list):
+    """
+    Registra/actualiza recordatorios para un número.
+    times_list: iterable de strings 'HH:MM' (24h).
+    """
+    # Normaliza a set de HH:MM
+    norm_times = {t.strip()[:5] for t in times_list if len(t.strip()) >= 4}
+
+    with REMINDERS_LOCK:
+        current = MED_REMINDERS.get(number, [])
+        # Si ya existe un reminder con el mismo nombre, actualiza sus horas
+        found = False
+        for r in current:
+            if r["name"] == med_name:
+                r["times"] = norm_times
+                r["last"] = ""   # resetea "último enviado"
+                found = True
+                break
+        if not found:
+            current.append({"name": med_name, "times": norm_times, "last": ""})
+        MED_REMINDERS[number] = current
+
+    _start_reminder_scheduler_once()
+
+
+def get_user_reminders(number):
+    """Devuelve una lista de recordatorios activos para un usuario."""
+    with REMINDERS_LOCK:
+        reminders = MED_REMINDERS.get(number, [])
+        if not reminders:
+            return "📝 No tienes recordatorios de medicamentos programados."
+        
+        result = "📋 *Tus recordatorios activos:*\n\n"
+        for i, r in enumerate(reminders, 1):
+            times_str = ", ".join(sorted(r["times"]))
+            result += f"{i}. *{r['name']}* - {times_str}\n"
+        
+        return result
 
 # -----------------------------------------------------------
 # Funciones para determinar diagnóstico según cada categoría
@@ -1944,6 +2034,11 @@ def administrar_chatbot(text, number, messageId, name):
             "¿Qué medicamento necesitas que te recuerde tomar?"
         )
         list_responses.append(text_Message(number, body))
+    
+    # 4.1.1) Consultar recordatorios activos
+    elif "mis recordatorios" in text or "ver recordatorios" in text:
+        reminder_info = get_user_reminders(number)
+        list_responses.append(text_Message(number, reminder_info))
 
     # 4.2) Continuar el flujo de recordatorio existente
     elif number in session_states and session_states[number].get("flow") == "med":
@@ -2017,12 +2112,14 @@ def administrar_chatbot(text, number, messageId, name):
             # Guardar horarios normalizados y cerrar flujo
             times_str = " y ".join(normalized_times)
             medication_sessions[number]["times"] = times_str
-            med   = medication_sessions[number]["name"]
+            med = medication_sessions[number]["name"]
             
-            # TODO: Conectar con scheduler real para programar recordatorios
+            # >>> NUEVO: registra recordatorios y enciende scheduler
+            register_medication_reminder(number, med, normalized_times)
+            
             body = (
-                f"¡Listo! Desde mañana, te enviaré un recordatorio de tu {med} a las {times_str}.\n"
-                "📌 Recuerda que tomar tus medicamentos es un paso hacia sentirte mejor 💊💙"
+                f"¡Listo! Programé recordatorios diarios para *{med}* a las {times_str}.\n"
+                f"{'🧪 (Modo test: se revisa cada 5s.)' if TEST_MODE else ''}"
             )
             list_responses.append(text_Message(number, body))
             session_states.pop(number, None)
