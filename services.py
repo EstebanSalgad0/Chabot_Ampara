@@ -3,6 +3,13 @@ import sett
 import json
 import time
 import random
+import unicodedata
+
+def normalize_text(t: str) -> str:
+    t = t.lower()
+    t = ''.join(c for c in unicodedata.normalize('NFD', t)
+                if unicodedata.category(c) != 'Mn')
+    return t
 
 # -----------------------------------------------------------
 # Estado para Guía de Ruta / Derivaciones
@@ -331,6 +338,15 @@ def markRead_Message(messageId):
 # -----------------------------------------------------------
 # Funciones para determinar diagnóstico según cada categoría
 # -----------------------------------------------------------
+# Helper para agregar disclaimer a diagnósticos
+def add_disclaimer_to_diagnosis(diagnosis, treatment, description):
+    disclaimer = (
+        "\n\n*IMPORTANTE: Esta es solo orientación general. "
+        "Consulta siempre a un profesional de la salud para diagnóstico y tratamiento apropiados.*"
+    )
+    return (diagnosis, treatment, description + disclaimer)
+
+# -----------------------------------------------------------
 def diagnostico_respiratorio(respuestas):
     respuestas = respuestas.lower()
     if (
@@ -338,7 +354,7 @@ def diagnostico_respiratorio(respuestas):
         and "estornudos" in respuestas
         and "congestion nasal" in respuestas
     ):
-        return (
+        return add_disclaimer_to_diagnosis(
             "Resfriado común",
             "Autocuidado en casa",
             "Mantén reposo e hidratación, aprovecha líquidos calientes y, si tienes congestión, usa solución salina nasal. Usa mascarilla si estás con personas de riesgo."
@@ -614,7 +630,7 @@ def diagnostico_metabolico(respuestas):
             "Realiza un hemograma de glucosa y HbA1c, ajusta dieta y actividad física, y programa consulta con endocrinología."
         )
     elif ("piel seca" in respuestas
-          and ("intolerancia al frio" in respuestas or "frío" in respuestas)):
+          and "intolerancia al frio" in respuestas):
         return (
             "Hipotiroidismo",
             "Control endocrinológico",
@@ -705,7 +721,7 @@ def diagnostico_neurologico(respuestas):
         return (
             "Neuralgia del trigémino",
             "Tratamiento farmacológico",
-            "Inicia carbamazepina o gabapentina según indicación médica y valora bloqueo del nervio si persiste."
+            "Consulta por tratamiento con carbamazepina o gabapentina según valoración médica y evalúa bloqueo del nervio si persiste."
         )
     else:
         return None, None, None
@@ -858,7 +874,7 @@ def diagnostico_dermatologico(respuestas):
         return (
             "Dermatitis atópica",
             "Hidratación + evitar alérgenos",
-            "Emuslivos frecuentes, evita jabones agresivos y considera corticoides tópicos si lo indica tu médico."
+            "Emolientes frecuentes, evita jabones agresivos y considera corticoides tópicos si lo indica tu médico."
         )
     elif (
         "placas rojas" in respuestas
@@ -896,7 +912,7 @@ def diagnostico_dermatologico(respuestas):
         return (
             "Herpes simple",
             "Antiviral tópico u oral",
-            "Inicia aciclovir tópico o valaciclovir oral según prescripción."
+            "Consulta por tratamiento con aciclovir tópico o valaciclovir oral según prescripción médica."
         )
     elif (
         "bultos" in respuestas
@@ -1257,10 +1273,15 @@ def handle_orientacion(text, number, messageId):
 # -----------------------------------------------------------
 
 def administrar_chatbot(text, number, messageId, name):
-    text = text.lower()
+    # Normaliza texto
+    text = normalize_text(text)
+    
     # 1) marcar leído y reacción inicial
     enviar_Mensaje_whatsapp(markRead_Message(messageId))
     enviar_Mensaje_whatsapp(replyReaction_Message(number, messageId, "🩺"))
+
+    # 👉 INICIALIZA list_responses AQUÍ
+    list_responses = []
     
 
 # 2) Mapeo de IDs de botones (button_reply) y filas de lista (list_reply)
@@ -1303,7 +1324,14 @@ def administrar_chatbot(text, number, messageId, name):
         # Menú principal
         "menu_principal_btn_1": "agendar cita",
         "menu_principal_btn_2": "recordatorio de medicamento",
-        "menu_principal_btn_3": "orientación de síntomas",
+        "menu_principal_btn_3": "menu_mas",
+
+        # filas del listado "Más opciones"
+        "menu_mas_row_1": "orientacion de sintomas",
+        "menu_mas_row_2": "guia de ruta",
+        "menu_mas_row_3": "explicador de documentos",
+        "menu_mas_row_4": "stock de medicamentos",
+        "menu_mas_row_5": "derivaciones/seguimiento",
 
         # Especialidades – página 1
         "cita_especialidad_row_1": "medicina general",
@@ -1334,8 +1362,8 @@ def administrar_chatbot(text, number, messageId, name):
         "cita_especialidad3_row_5":  "terapias complementarias",
         "cita_especialidad3_row_6":  "toma de muestras",
         "cita_especialidad3_row_7":  "vacunación / niño sano",
-        "cita_especialidad3_row_8":  "control crónico",
-        "cita_especialidad3_row_9":  "atención domiciliaria",
+        "cita_especialidad3_row_8":  "atención domiciliaria",
+        "cita_especialidad3_row_9":  "telemedicina",
         "cita_especialidad3_row_10": "otro",
 
         # Fecha y Hora (button_reply)
@@ -1372,15 +1400,15 @@ def administrar_chatbot(text, number, messageId, name):
         "orientacion_categorias2_row_2": "orientacion_digestivo_extraccion",
     }
 
+    # 👉 APLICA EL MAPEO **ANTES** DE CUALQUIER LÓGICA
+    if text in ui_mapping:
+        text = ui_mapping[text]
+
     # -----------------------------------------------------------
     # 4.bis) MICRO: Guía de Ruta / Derivaciones
     # -----------------------------------------------------------
-    # Disparadores por keyword (WhatsApp texto)
-    if "guía de ruta" in text or "guia de ruta" in text or "derivación" in text or "derivacion" in text or "ruta de atención" in text:
-        list_responses.append(start_route_flow(number, messageId))
-
-    # Si el usuario ya está dentro del flujo
-    elif number in route_sessions:
+    # Si el usuario ya está dentro del flujo (PRIORIDAD)
+    if number in route_sessions:
         st = route_sessions[number]
         step = st.get("step")
 
@@ -1591,20 +1619,18 @@ def administrar_chatbot(text, number, messageId, name):
                 ))
             route_sessions.pop(number, None)
 
-        # Paso: guardar/cerrar
-        elif step in ("requirements", "close"):
-            if text in ("guardar_si", "cerrar_guardar_si", "ges_reminder_si", "sede_si"):
-                list_responses.append(text_Message(
-                    number,
-                    "✅ Guardado. Puedo recordarte revisar SOME o el estado de tu interconsulta/derivación cuando lo indiques."
-                ))
-            else:
-                list_responses.append(text_Message(
-                    number,
-                    "Listo. Si necesitas volver a la *Guía de Ruta*, escribe: *guía de ruta*."
-                ))
-            route_sessions.pop(number, None)
+        # 👉 ENVÍA Y SALE
+        for i, payload in enumerate(list_responses):
+            if payload and payload.strip():
+                enviar_Mensaje_whatsapp(payload)
+            if i < len(list_responses) - 1:
+                time.sleep(0.2)
+        return
 
+    # --- Disparadores de Guía de Ruta (con discoverability) ---
+    triggers_route = ["guia de ruta", "ruta de atencion", "derivacion"]
+    if any(trigger in text for trigger in triggers_route):
+        list_responses.append(start_route_flow(number, messageId))
 
     datetime_mapping = {
     "cita_datetime_row_1": "2025-04-18 10:00 AM",
@@ -1619,13 +1645,6 @@ def administrar_chatbot(text, number, messageId, name):
     "cita_datetime_row_10":"2025-04-21 02:30 PM",
     }
 
-    # Normalizar y mapear IDs de UI
-    if text in ui_mapping:
-        text = ui_mapping[text]
-
-
-
-
     # 4) flujo de orientación activo (solo orientación de síntomas)
     if number in session_states and 'categoria' in session_states[number]:
         state = session_states[number]
@@ -1638,14 +1657,13 @@ def administrar_chatbot(text, number, messageId, name):
             session_states.pop(number, None)
         return
 
-    list_responses = []
     disclaimer = (
         "\n\n*IMPORTANTE: Soy un asistente virtual con información general. "
         "Esta información NO reemplaza el diagnóstico ni la consulta con un profesional de la salud.*"
     )
 
     # Simular lectura
-    time.sleep(random.uniform(0.5, 1.5))
+    time.sleep(random.uniform(0.2, 0.5))
 
     reacciones_ack = ["👍", "👌", "✅", "🩺"]
     emojis_saludo   = ["👋", "😊", "🩺", "🧑‍⚕️"]
@@ -1669,8 +1687,26 @@ def administrar_chatbot(text, number, messageId, name):
 
     # --- Lógica principal ---
 
+    # 0) Crisis de salud mental (prioritario)
+    crisis_terms = [
+        "me quiero morir", "no quiero vivir", "quiero suicidarme", 
+        "me voy a suicidar", "pensamiento suicida", "quiero terminar todo",
+        "no aguanto mas", "no puedo mas", "me quiero matar"
+    ]
+    if any(term in text for term in crisis_terms):
+        body = (
+            "🆘 *Tu bienestar es importante. No estás solo/a.* 🆘\n\n"
+            "📞 *Líneas de ayuda inmediata:*\n"
+            "• Salud Responde: *600 360 7777*\n"
+            "• Fono Familia: *149*\n"
+            "• Todo Mejora: *56 2 2234 0011*\n\n"
+            "🩺 También puedo ayudarte a agendar una cita urgente con nuestro equipo de salud mental.\n\n"
+            "Escribe *agendar cita* para programar atención profesional."
+        )
+        list_responses.append(text_Message(number, body))
+
     # 1) Emergencias
-    if any(w in text for w in ["ayuda urgente", "urgente", "accidente", "samu", "131"]):
+    elif any(w in text for w in ["ayuda urgente", "urgente", "accidente", "samu", "131"]):
         body = (
             "🚨 *Si estás en una emergencia médica, llama de inmediato:* 🚨\n"
             "• SAMU: 131\n"
@@ -1688,13 +1724,13 @@ def administrar_chatbot(text, number, messageId, name):
             "¿En qué puedo ayudarte?\n"
             "1️⃣ Agendar Cita Médica\n"
             "2️⃣ Recordatorio de Medicamento\n"
-            "3️⃣ Orientación de Síntomas"
+            "3️⃣ Más opciones"
         )
         footer = "MedicAI"
         opts = [
             "🗓️ Cita Médica",
             "💊 Recordar Medic",
-            "🩺 Orientar Sint"
+            "➕ Más opciones"
         ]
         list_responses.append(
             buttonReply_Message(number, opts, body, footer, "menu_principal", messageId)
@@ -1703,10 +1739,32 @@ def administrar_chatbot(text, number, messageId, name):
             replyReaction_Message(number, messageId, random.choice(emojis_saludo))
         )
 
+    # Menú "Más opciones"
+    elif text == "menu_mas":
+        body = "Más opciones de ayuda:"
+        footer = "MedicAI"
+        opciones_mas = [
+            "🩺 Orientación de Síntomas",
+            "🧾 Guía de Ruta / Derivaciones",
+            "📄 Explicador de Documentos",
+            "💊 Stock de Medicamentos",
+            "🧭 Derivaciones / Seguimiento"
+        ]
+        list_responses.append(
+            listReply_Message(number, opciones_mas, body, footer, "menu_mas", messageId)
+        )
+        # Envía el mensaje y sale para mantener consistencia
+        for i, payload in enumerate(list_responses):
+            if payload and payload.strip():
+                enviar_Mensaje_whatsapp(payload)
+            if i < len(list_responses) - 1:
+                time.sleep(0.2)
+        return
+
      # -----------------------------------------------------------
      # 3) Flujo: Agendar Citas
      # -----------------------------------------------------------
-    elif "agendar cita" in text or "cita médica" in text:
+    elif "agendar cita" in text or "cita medica" in text:
          appointment_sessions[number] = {}                       # ← MOD: inicializo estado de cita
          body = "🗓️ ¡Perfecto! Selecciona el tipo de atención que necesitas:"
          footer = "Agendamiento de Citas"
@@ -1724,7 +1782,7 @@ def administrar_chatbot(text, number, messageId, name):
          )
 
      # 3.1) Listado interactivo de especialidades (página 2)
-    elif text == "➡️ ver más especialidades":
+    elif text == "➡️ ver más especialidades" or text.startswith("➡️ ver"):
          body = "🔍 Otras especialidades – selecciona una opción:"
          footer = "Agendamiento – Especialidades"
          opts2 = [
@@ -1738,7 +1796,7 @@ def administrar_chatbot(text, number, messageId, name):
          )
 
      # 3.1.1) Paginación: tercera página de especialidades
-    elif text == "➡️ mostrar más…":
+    elif text == "➡️ mostrar más…" or text.startswith("➡️ mostrar"):
          body = "🔍 Más especialidades – selecciona una opción:"
          footer = "Agendamiento – Especialidades"
          opts3 = [
@@ -1759,7 +1817,7 @@ def administrar_chatbot(text, number, messageId, name):
          "medicina interna", "reumatología", "neurología", "gastroenterología",
          "endocrinología", "urología", "infectología", "terapias complementarias",
          "toma de muestras", "vacunación / niño sano", "atención domiciliaria",
-         "telemedicina", "otro", "no sé"
+         "telemedicina", "otro", "no sé", "no se"
      ]:
          appointment_sessions[number]['especialidad'] = text       # ← MOD: guardo especialidad
          body = "⏰ ¿Tienes preferencia de día y hora para tu atención?"
@@ -1809,11 +1867,11 @@ def administrar_chatbot(text, number, messageId, name):
          )
 
      # 3.6) Confirmación final
-    elif text in ["sede talca", "sede curicó", "sede linares"]:
+    elif text in ["sede talca", "sede curicó", "sede curico", "sede linares"]:
          appointment_sessions[number]['sede'] = text             # ← MOD: guardo sede
-         esp  = appointment_sessions[number]['especialidad'].capitalize()
-         dt   = appointment_sessions[number].get('datetime', 'día y hora')
-         sede = appointment_sessions[number]['sede'].capitalize()
+         esp  = appointment_sessions.get(number, {}).get('especialidad', 'especialidad').capitalize()
+         dt   = appointment_sessions.get(number, {}).get('datetime', 'día y hora')
+         sede = appointment_sessions.get(number, {}).get('sede', 'sede').capitalize()
          # formateo fecha y hora si vienen como "YYYY-MM-DD HH:MM"
          if " " in dt:
              fecha, hora = dt.split(" ", 1)
@@ -1895,13 +1953,42 @@ def administrar_chatbot(text, number, messageId, name):
             list_responses.append(text_Message(number, body))
 
         elif step == "ask_times":
-            # Guardar horarios y cerrar flujo
-            medication_sessions[number]["times"] = text
+            # Validar y normalizar horarios
+            import re
+            
+            # Función helper para normalizar hora
+            def normalize_time(time_str):
+                # Buscar patrones como "8", "08", "8:00", "08:00"
+                pattern = r'(\d{1,2})(?::(\d{2}))?'
+                matches = re.findall(pattern, time_str)
+                normalized_times = []
+                
+                for hour, minute in matches:
+                    hour = int(hour)
+                    minute = int(minute) if minute else 0
+                    if 0 <= hour <= 23 and 0 <= minute <= 59:
+                        normalized_times.append(f"{hour:02d}:{minute:02d}")
+                
+                return normalized_times
+            
+            normalized_times = normalize_time(text)
+            
+            if not normalized_times:
+                body = (
+                    "⚠️ Por favor, ingresa horarios válidos en formato HH:MM "
+                    "(ejemplo: 08:00, 14:30, 20:00). Intenta nuevamente:"
+                )
+                list_responses.append(text_Message(number, body))
+                return
+            
+            # Guardar horarios normalizados y cerrar flujo
+            times_str = " y ".join(normalized_times)
+            medication_sessions[number]["times"] = times_str
             med   = medication_sessions[number]["name"]
-            times = medication_sessions[number]["times"]
-
+            
+            # TODO: Conectar con scheduler real para programar recordatorios
             body = (
-                f"¡Listo! Desde mañana, te enviaré un recordatorio de tu {med} a las {times}.\n"
+                f"¡Listo! Desde mañana, te enviaré un recordatorio de tu {med} a las {times_str}.\n"
                 "📌 Recuerda que tomar tus medicamentos es un paso hacia sentirte mejor 💊💙"
             )
             list_responses.append(text_Message(number, body))
@@ -1909,7 +1996,7 @@ def administrar_chatbot(text, number, messageId, name):
 
             
     # 5) Inicio de orientación de síntomas
-    elif "orientación de síntomas" in text or "orientacion de sintomas" in text:
+    elif "orientacion de sintomas" in text:
         body = "Selecciona categoría de Enfermedades:"
         footer = "Orient. Síntomas"
         opts = [
@@ -1922,7 +2009,7 @@ def administrar_chatbot(text, number, messageId, name):
             "Músculo 💪",
             "Salud Mental 🧘",
             "Dermatologicas 🩹",
-            "Ver más ➡️",
+            "ver más ➡️",
         ]
         enviar_Mensaje_whatsapp(
             listReply_Message(number, opts, body, footer, "orientacion_categorias", messageId)
@@ -1930,7 +2017,7 @@ def administrar_chatbot(text, number, messageId, name):
         return
 
     # 5.1) Paginación: si el usuario elige "Ver más ➡️", mostramos las categorías adicionales
-    elif text == "Ver más ➡️":
+    elif text in ("ver mas ➡️", "ver más ➡️"):
         opts2 = [
             "Ginecológicas 👩‍⚕️",
             "Digestivas 🍽️",
@@ -1973,6 +2060,47 @@ def administrar_chatbot(text, number, messageId, name):
         enviar_Mensaje_whatsapp(text_Message(number, prompt))
         return
 
+    # Nuevas opciones del menú "Más opciones"
+    elif text == "explicador de documentos":
+        # TODO: Implementar sesión de estado para explicador de documentos
+        # TODO: Añadir handler para procesamiento de imágenes/texto de documentos médicos
+        list_responses.append(text_Message(
+            number,
+            "📄 *Explicador de Documentos*\n"
+            "Puedo ayudarte a entender documentos médicos como:\n"
+            "• Resultados de exámenes\n"
+            "• Informes médicos\n"
+            "• Recetas médicas\n\n"
+            "Envía una foto o descripción del documento que necesitas entender."
+        ))
+
+    elif text == "stock de medicamentos":
+        # TODO: Implementar integración con API de farmacias para consulta de stock real
+        # TODO: Añadir sesión de estado para búsqueda de medicamentos
+        list_responses.append(text_Message(
+            number,
+            "💊 *Stock de Medicamentos*\n"
+            "Servicio para consultar disponibilidad de medicamentos:\n"
+            "• Consulta stock en farmacias cercanas\n"
+            "• Precios comparativos\n"
+            "• Medicamentos genéricos alternativos\n\n"
+            "¿Qué medicamento necesitas consultar?"
+        ))
+
+    elif text == "derivaciones/seguimiento":
+        # TODO: Implementar integración con sistema de gestión hospitalaria
+        # TODO: Añadir sesión de estado para seguimiento de derivaciones
+        list_responses.append(text_Message(
+            number,
+            "🧭 *Derivaciones y Seguimiento*\n"
+            "Te ayudo con el seguimiento de:\n"
+            "• Estado de interconsultas\n"
+            "• Resultados de exámenes\n"
+            "• Fechas de citas programadas\n"
+            "• Recordatorios de controles\n\n"
+            "¿Qué quieres revisar?"
+        ))
+
     # 7) Agradecimientos y despedidas
     elif any(w in text for w in ["gracias", "muchas gracias"]):
         list_responses.append(text_Message(number, random.choice(agradecimientos)))
@@ -1992,4 +2120,4 @@ def administrar_chatbot(text, number, messageId, name):
         if payload and payload.strip():
             enviar_Mensaje_whatsapp(payload)
         if i < len(list_responses) - 1:
-            time.sleep(1)
+            time.sleep(0.2)
