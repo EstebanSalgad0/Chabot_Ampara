@@ -4,23 +4,28 @@ import json
 import time
 import random
 import unicodedata
-import threading
 from datetime import datetime
+import threading
+
+# --- TZ helper (opcional) ---
+try:
+    import pytz
+except Exception:
+    pytz = None
+
+DEFAULT_TZ = "America/Santiago"
+
+def _now_hhmm_local(tz_name: str = DEFAULT_TZ) -> str:
+    if pytz:
+        tz = pytz.timezone(tz_name)
+        return datetime.now(tz).strftime("%H:%M")
+    return datetime.now().strftime("%H:%M")
 
 def normalize_text(t: str) -> str:
     t = t.lower()
     t = ''.join(c for c in unicodedata.normalize('NFD', t)
                 if unicodedata.category(c) != 'Mn')
     return t
-
-# ===== Recordatorios en memoria (medicación) =====
-MED_REMINDERS = {}          # { number: [ { "name": str, "times": set(["08:00","20:00"]), "last": "" }, ... ] }
-REMINDERS_LOCK = threading.Lock()
-
-TEST_MODE = True            # ← pon True para pruebas rápidas
-CHECK_INTERVAL = 5 if TEST_MODE else 60   # cada 5s en test, 60s en prod
-
-_scheduler_started = False
 
 # -----------------------------------------------------------
 # Estado para Guía de Ruta / Derivaciones
@@ -108,6 +113,18 @@ appointment_sessions = {}
 # -----------------------------------------------------------
 global medication_sessions
 medication_sessions = {}
+
+# -----------------------------------------------------------
+# Sistema de recordatorios de medicamentos
+# -----------------------------------------------------------
+global MED_REMINDERS
+MED_REMINDERS = {}  # { number: [{"name": "med", "times": ["08:00", "20:00"], "last": ""}] }
+
+global REMINDERS_LOCK
+REMINDERS_LOCK = threading.Lock()
+
+global REMINDER_THREAD_STARTED
+REMINDER_THREAD_STARTED = False
 
 # -----------------------------------------------------------
 # Ejemplos de síntomas personalizados por categoría
@@ -310,38 +327,11 @@ def buttonReply_Message(number, options, body, footer, sedd, messageId):
 
 
 def listReply_Message(number, options, body, footer, sedd, messageId):
-    """
-    options puede traer:
-      - ["Título corto", "Otro título"]
-      - [("Título", "Descripción"), ("Título2", "Desc2")]
-    Siempre se fuerza: title<=24, description<=72
-    """
-    MAX_TITLE = 24
-    MAX_DESC = 72
-
     rows = []
     for i, opt in enumerate(options):
-        if isinstance(opt, (list, tuple)):
-            title = str(opt[0]) if len(opt) > 0 else ""
-            desc  = str(opt[1]) if len(opt) > 1 else ""
-        else:
-            # Si solo llega un string, úsalo como título y deja desc vacía
-            title = str(opt)
-            desc  = ""
-
-        # Si el string era largo y no se dio descripción, reparte el sobrante a desc
-        if not desc and len(title) > MAX_TITLE:
-            desc = title[MAX_TITLE:]
-        # Recortes hard por políticas WA
-        title = title[:MAX_TITLE]
-        desc  = desc[:MAX_DESC]
-
-        rows.append({
-            "id": f"{sedd}_row_{i+1}",
-            "title": title,
-            "description": desc
-        })
-
+        title = opt if len(opt) <= 24 else opt[:24]
+        desc = "" if len(opt) <= 24 else opt
+        rows.append({"id": f"{sedd}_row_{i+1}", "title": title, "description": desc})
     return json.dumps({
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
@@ -373,96 +363,8 @@ def markRead_Message(messageId):
         "message_id": messageId
     })
 
-
-# ===== SISTEMA DE RECORDATORIOS =====
-
-def _reminder_scheduler_loop():
-    """Hilo que verifica cada CHECK_INTERVAL si hay alarmas para enviar."""
-    while True:
-        try:
-            now = datetime.now().strftime("%H:%M")   # resolución de minuto
-            with REMINDERS_LOCK:
-                # Recorre todos los números
-                for number, items in list(MED_REMINDERS.items()):
-                    for r in items:
-                        # Si coincide la hora y no se envió ya en este minuto
-                        if now in r["times"] and r.get("last") != now:
-                            med_name = r["name"]
-                            msg = (
-                                f"⏰ *Recordatorio de medicamento*\n"
-                                f"Es hora de tomar: *{med_name}*."
-                            )
-                            try:
-                                enviar_Mensaje_whatsapp(text_Message(number, msg))
-                            except Exception as e:
-                                print(f"[reminder] error al enviar: {e}")
-                            r["last"] = now
-        except Exception as e:
-            print(f"[reminder-loop] excepción: {e}")
-        finally:
-            time.sleep(CHECK_INTERVAL)
-
-
-def _start_reminder_scheduler_once():
-    """Arranca el hilo del scheduler una sola vez."""
-    global _scheduler_started
-    if _scheduler_started:
-        return
-    t = threading.Thread(target=_reminder_scheduler_loop, daemon=True)
-    t.start()
-    _scheduler_started = True
-
-
-def register_medication_reminder(number, med_name, times_list):
-    """
-    Registra/actualiza recordatorios para un número.
-    times_list: iterable de strings 'HH:MM' (24h).
-    """
-    # Normaliza a set de HH:MM
-    norm_times = {t.strip()[:5] for t in times_list if len(t.strip()) >= 4}
-
-    with REMINDERS_LOCK:
-        current = MED_REMINDERS.get(number, [])
-        # Si ya existe un reminder con el mismo nombre, actualiza sus horas
-        found = False
-        for r in current:
-            if r["name"] == med_name:
-                r["times"] = norm_times
-                r["last"] = ""   # resetea "último enviado"
-                found = True
-                break
-        if not found:
-            current.append({"name": med_name, "times": norm_times, "last": ""})
-        MED_REMINDERS[number] = current
-
-    _start_reminder_scheduler_once()
-
-
-def get_user_reminders(number):
-    """Devuelve una lista de recordatorios activos para un usuario."""
-    with REMINDERS_LOCK:
-        reminders = MED_REMINDERS.get(number, [])
-        if not reminders:
-            return "📝 No tienes recordatorios de medicamentos programados."
-        
-        result = "📋 *Tus recordatorios activos:*\n\n"
-        for i, r in enumerate(reminders, 1):
-            times_str = ", ".join(sorted(r["times"]))
-            result += f"{i}. *{r['name']}* - {times_str}\n"
-        
-        return result
-
 # -----------------------------------------------------------
 # Funciones para determinar diagnóstico según cada categoría
-# -----------------------------------------------------------
-# Helper para agregar disclaimer a diagnósticos
-def add_disclaimer_to_diagnosis(diagnosis, treatment, description):
-    disclaimer = (
-        "\n\n*IMPORTANTE: Esta es solo orientación general. "
-        "Consulta siempre a un profesional de la salud para diagnóstico y tratamiento apropiados.*"
-    )
-    return (diagnosis, treatment, description + disclaimer)
-
 # -----------------------------------------------------------
 def diagnostico_respiratorio(respuestas):
     respuestas = respuestas.lower()
@@ -471,7 +373,7 @@ def diagnostico_respiratorio(respuestas):
         and "estornudos" in respuestas
         and "congestion nasal" in respuestas
     ):
-        return add_disclaimer_to_diagnosis(
+        return (
             "Resfriado común",
             "Autocuidado en casa",
             "Mantén reposo e hidratación, aprovecha líquidos calientes y, si tienes congestión, usa solución salina nasal. Usa mascarilla si estás con personas de riesgo."
@@ -747,7 +649,7 @@ def diagnostico_metabolico(respuestas):
             "Realiza un hemograma de glucosa y HbA1c, ajusta dieta y actividad física, y programa consulta con endocrinología."
         )
     elif ("piel seca" in respuestas
-          and "intolerancia al frio" in respuestas):
+          and ("intolerancia al frio" in respuestas or "frío" in respuestas)):
         return (
             "Hipotiroidismo",
             "Control endocrinológico",
@@ -838,7 +740,7 @@ def diagnostico_neurologico(respuestas):
         return (
             "Neuralgia del trigémino",
             "Tratamiento farmacológico",
-            "Consulta por tratamiento con carbamazepina o gabapentina según valoración médica y evalúa bloqueo del nervio si persiste."
+            "Inicia carbamazepina o gabapentina según indicación médica y valora bloqueo del nervio si persiste."
         )
     else:
         return None, None, None
@@ -991,7 +893,7 @@ def diagnostico_dermatologico(respuestas):
         return (
             "Dermatitis atópica",
             "Hidratación + evitar alérgenos",
-            "Emolientes frecuentes, evita jabones agresivos y considera corticoides tópicos si lo indica tu médico."
+            "Emuslivos frecuentes, evita jabones agresivos y considera corticoides tópicos si lo indica tu médico."
         )
     elif (
         "placas rojas" in respuestas
@@ -1029,7 +931,7 @@ def diagnostico_dermatologico(respuestas):
         return (
             "Herpes simple",
             "Antiviral tópico u oral",
-            "Consulta por tratamiento con aciclovir tópico o valaciclovir oral según prescripción médica."
+            "Inicia aciclovir tópico o valaciclovir oral según prescripción."
         )
     elif (
         "bultos" in respuestas
@@ -1449,6 +1351,7 @@ def administrar_chatbot(text, number, messageId, name):
         "menu_mas_row_3": "explicador de documentos",
         "menu_mas_row_4": "stock de medicamentos",
         "menu_mas_row_5": "derivaciones/seguimiento",
+        "menu_mas_row_6": "gestionar recordatorios",
 
         # Especialidades – página 1
         "cita_especialidad_row_1": "medicina general",
@@ -1479,8 +1382,8 @@ def administrar_chatbot(text, number, messageId, name):
         "cita_especialidad3_row_5":  "terapias complementarias",
         "cita_especialidad3_row_6":  "toma de muestras",
         "cita_especialidad3_row_7":  "vacunación / niño sano",
-        "cita_especialidad3_row_8":  "atención domiciliaria",
-        "cita_especialidad3_row_9":  "telemedicina",
+        "cita_especialidad3_row_8":  "control crónico",
+        "cita_especialidad3_row_9":  "atención domiciliaria",
         "cita_especialidad3_row_10": "otro",
 
         # Fecha y Hora (button_reply)
@@ -1524,8 +1427,12 @@ def administrar_chatbot(text, number, messageId, name):
     # -----------------------------------------------------------
     # 4.bis) MICRO: Guía de Ruta / Derivaciones
     # -----------------------------------------------------------
-    # Si el usuario ya está dentro del flujo (PRIORIDAD)
-    if number in route_sessions:
+    # --- Disparadores por keyword (texto) de Guía de Ruta ---
+    if ("guia de ruta" in text or "derivacion" in text or "ruta de atencion" in text):
+        list_responses.append(start_route_flow(number, messageId))
+
+    # Si el usuario ya está dentro del flujo
+    elif number in route_sessions:
         st = route_sessions[number]
         step = st.get("step")
 
@@ -1741,18 +1648,7 @@ def administrar_chatbot(text, number, messageId, name):
             if payload and payload.strip():
                 enviar_Mensaje_whatsapp(payload)
             if i < len(list_responses) - 1:
-                time.sleep(0.2)
-        return
-
-    # --- Disparadores de Guía de Ruta (con discoverability) ---
-    triggers_route = ["guia de ruta", "ruta de atencion", "derivacion"]
-    if any(trigger in text for trigger in triggers_route):
-        list_responses.append(start_route_flow(number, messageId))
-        for i, payload in enumerate(list_responses):
-            if payload and payload.strip():
-                enviar_Mensaje_whatsapp(payload)
-            if i < len(list_responses) - 1:
-                time.sleep(0.2)
+                time.sleep(1)
         return
 
     datetime_mapping = {
@@ -1786,7 +1682,7 @@ def administrar_chatbot(text, number, messageId, name):
     )
 
     # Simular lectura
-    time.sleep(random.uniform(0.2, 0.5))
+    time.sleep(random.uniform(0.5, 1.5))
 
     reacciones_ack = ["👍", "👌", "✅", "🩺"]
     emojis_saludo   = ["👋", "😊", "🩺", "🧑‍⚕️"]
@@ -1810,26 +1706,8 @@ def administrar_chatbot(text, number, messageId, name):
 
     # --- Lógica principal ---
 
-    # 0) Crisis de salud mental (prioritario)
-    crisis_terms = [
-        "me quiero morir", "no quiero vivir", "quiero suicidarme", 
-        "me voy a suicidar", "pensamiento suicida", "quiero terminar todo",
-        "no aguanto mas", "no puedo mas", "me quiero matar"
-    ]
-    if any(term in text for term in crisis_terms):
-        body = (
-            "🆘 *Tu bienestar es importante. No estás solo/a.* 🆘\n\n"
-            "📞 *Líneas de ayuda inmediata:*\n"
-            "• Salud Responde: *600 360 7777*\n"
-            "• Fono Familia: *149*\n"
-            "• Todo Mejora: *56 2 2234 0011*\n\n"
-            "🩺 También puedo ayudarte a agendar una cita urgente con nuestro equipo de salud mental.\n\n"
-            "Escribe *agendar cita* para programar atención profesional."
-        )
-        list_responses.append(text_Message(number, body))
-
     # 1) Emergencias
-    elif any(w in text for w in ["ayuda urgente", "urgente", "accidente", "samu", "131"]):
+    if any(w in text for w in ["ayuda urgente", "urgente", "accidente", "samu", "131"]):
         body = (
             "🚨 *Si estás en una emergencia médica, llama de inmediato:* 🚨\n"
             "• SAMU: 131\n"
@@ -1845,9 +1723,12 @@ def administrar_chatbot(text, number, messageId, name):
         body = (
             f"👋 ¡Hola {name}! Soy *MedicAI*, tu asistente virtual.\n\n"
             "¿En qué puedo ayudarte?\n"
-            "1️⃣ *Agendar Cita Médica* – reservas por especialidad y sede\n"
-            "2️⃣ *Recordatorio de Medicamento* – horarios y adherencia\n"
-            "3️⃣ *Más opciones* – guía de ruta/derivaciones, explicación de documentos, stock de fármacos y seguimiento\n"
+            "1️⃣ Agendar Cita Médica\n"
+            "2️⃣ Recordatorio de Medicamento\n"
+            "3️⃣ Más opciones\n\n"
+            "💡 *Comandos útiles:*\n"
+            "• *mis recordatorios* - Ver recordatorios activos\n"
+            "• *eliminar recordatorio [número]* - Eliminar recordatorio"
         )
         footer = "MedicAI"
         opts = [
@@ -1867,11 +1748,12 @@ def administrar_chatbot(text, number, messageId, name):
         body = "Más opciones de ayuda:"
         footer = "MedicAI"
         opciones_mas = [
-            ("🩺 Orientación de Síntomas", "Evaluación preliminar con recomendaciones"),
-            ("🧾 Guía de Ruta / Derivaciones", "Pasos en SOME, GES y urgencias"),
-            ("📄 Explicador de Documentos", "Interpreta recetas, exámenes e interconsultas"),
-            ("💊 Stock de Medicamentos", "Disponibilidad cercana y genéricos"),
-            ("🧭 Derivaciones / Seguimiento", "Estado de interconsultas, exámenes y citas")
+            "🩺 Orientación de Síntomas",
+            "🧾 Guía de Ruta / Derivaciones",
+            "📄 Explicador de Documentos",
+            "💊 Stock de Medicamentos",
+            "🧭 Derivaciones / Seguimiento",
+            "⏰ Gestionar Recordatorios"
         ]
         list_responses.append(
             listReply_Message(number, opciones_mas, body, footer, "menu_mas", messageId)
@@ -1881,7 +1763,7 @@ def administrar_chatbot(text, number, messageId, name):
             if payload and payload.strip():
                 enviar_Mensaje_whatsapp(payload)
             if i < len(list_responses) - 1:
-                time.sleep(0.2)
+                time.sleep(1)
         return
 
      # -----------------------------------------------------------
@@ -1905,7 +1787,7 @@ def administrar_chatbot(text, number, messageId, name):
          )
 
      # 3.1) Listado interactivo de especialidades (página 2)
-    elif text == "➡️ ver más especialidades" or text.startswith("➡️ ver"):
+    elif text == "➡️ ver más especialidades":
          body = "🔍 Otras especialidades – selecciona una opción:"
          footer = "Agendamiento – Especialidades"
          opts2 = [
@@ -1919,7 +1801,7 @@ def administrar_chatbot(text, number, messageId, name):
          )
 
      # 3.1.1) Paginación: tercera página de especialidades
-    elif text == "➡️ mostrar más…" or text.startswith("➡️ mostrar"):
+    elif text == "➡️ mostrar más…":
          body = "🔍 Más especialidades – selecciona una opción:"
          footer = "Agendamiento – Especialidades"
          opts3 = [
@@ -1940,7 +1822,7 @@ def administrar_chatbot(text, number, messageId, name):
          "medicina interna", "reumatología", "neurología", "gastroenterología",
          "endocrinología", "urología", "infectología", "terapias complementarias",
          "toma de muestras", "vacunación / niño sano", "atención domiciliaria",
-         "telemedicina", "otro", "no sé", "no se"
+         "telemedicina", "otro", "no sé"
      ]:
          appointment_sessions[number]['especialidad'] = text       # ← MOD: guardo especialidad
          body = "⏰ ¿Tienes preferencia de día y hora para tu atención?"
@@ -1990,11 +1872,11 @@ def administrar_chatbot(text, number, messageId, name):
          )
 
      # 3.6) Confirmación final
-    elif text in ["sede talca", "sede curicó", "sede curico", "sede linares"]:
+    elif text in ["sede talca", "sede curicó", "sede linares"]:
          appointment_sessions[number]['sede'] = text             # ← MOD: guardo sede
-         esp  = appointment_sessions.get(number, {}).get('especialidad', 'especialidad').capitalize()
-         dt   = appointment_sessions.get(number, {}).get('datetime', 'día y hora')
-         sede = appointment_sessions.get(number, {}).get('sede', 'sede').capitalize()
+         esp  = appointment_sessions[number]['especialidad'].capitalize()
+         dt   = appointment_sessions[number].get('datetime', 'día y hora')
+         sede = appointment_sessions[number]['sede'].capitalize()
          # formateo fecha y hora si vienen como "YYYY-MM-DD HH:MM"
          if " " in dt:
              fecha, hora = dt.split(" ", 1)
@@ -2034,11 +1916,6 @@ def administrar_chatbot(text, number, messageId, name):
             "¿Qué medicamento necesitas que te recuerde tomar?"
         )
         list_responses.append(text_Message(number, body))
-    
-    # 4.1.1) Consultar recordatorios activos
-    elif "mis recordatorios" in text or "ver recordatorios" in text:
-        reminder_info = get_user_reminders(number)
-        list_responses.append(text_Message(number, reminder_info))
 
     # 4.2) Continuar el flujo de recordatorio existente
     elif number in session_states and session_states[number].get("flow") == "med":
@@ -2081,48 +1958,93 @@ def administrar_chatbot(text, number, messageId, name):
             list_responses.append(text_Message(number, body))
 
         elif step == "ask_times":
-            # Validar y normalizar horarios
-            import re
-            
-            # Función helper para normalizar hora
-            def normalize_time(time_str):
-                # Buscar patrones como "8", "08", "8:00", "08:00"
-                pattern = r'(\d{1,2})(?::(\d{2}))?'
-                matches = re.findall(pattern, time_str)
-                normalized_times = []
+            # Guardar horarios y configurar recordatorio automático
+            medication_sessions[number]["times"] = text
+            med   = medication_sessions[number]["name"]
+            times = medication_sessions[number]["times"]
+
+            # Procesar horarios para el sistema de recordatorios
+            try:
+                # Extraer horarios del texto (formatos: "08:00 y 20:00", "8:00", "08:00, 14:00, 20:00")
+                import re
+                time_pattern = r'\b(\d{1,2}):(\d{2})\b'
+                matches = re.findall(time_pattern, times)
                 
-                for hour, minute in matches:
-                    hour = int(hour)
-                    minute = int(minute) if minute else 0
-                    if 0 <= hour <= 23 and 0 <= minute <= 59:
-                        normalized_times.append(f"{hour:02d}:{minute:02d}")
-                
-                return normalized_times
-            
-            normalized_times = normalize_time(text)
-            
-            if not normalized_times:
+                if matches:
+                    # Convertir a formato HH:MM
+                    times_list = []
+                    for hour, minute in matches:
+                        formatted_time = f"{hour.zfill(2)}:{minute}"
+                        times_list.append(formatted_time)
+                    
+                    # Registrar recordatorio en el sistema
+                    register_medication_reminder(number, med, times_list)
+                    
+                    times_str = ", ".join(times_list)
+                    body = (
+                        f"¡Listo! ✅ He configurado tus recordatorios de *{med}* para las {times_str}.\n\n"
+                        "🔔 Recibirás notificaciones automáticas en esos horarios.\n"
+                        "📌 Recuerda que tomar tus medicamentos es un paso hacia sentirte mejor 💊💙"
+                    )
+                else:
+                    # Si no se pueden extraer horarios válidos
+                    body = (
+                        f"He guardado tu recordatorio de *{med}* para: {times}\n\n"
+                        "📝 Para recordatorios automáticos, asegúrate de usar formato 24h (ej: 08:00, 14:00)\n"
+                        "📌 Recuerda que tomar tus medicamentos es un paso hacia sentirte mejor 💊💙"
+                    )
+            except Exception as e:
+                print(f"Error procesando horarios: {e}")
                 body = (
-                    "⚠️ Por favor, ingresa horarios válidos en formato HH:MM "
-                    "(ejemplo: 08:00, 14:30, 20:00). Intenta nuevamente:"
+                    f"He guardado tu recordatorio de *{med}* para: {times}\n"
+                    "📌 Recuerda que tomar tus medicamentos es un paso hacia sentirte mejor 💊💙"
                 )
-                list_responses.append(text_Message(number, body))
-                return
             
-            # Guardar horarios normalizados y cerrar flujo
-            times_str = " y ".join(normalized_times)
-            medication_sessions[number]["times"] = times_str
-            med = medication_sessions[number]["name"]
-            
-            # >>> NUEVO: registra recordatorios y enciende scheduler
-            register_medication_reminder(number, med, normalized_times)
-            
-            body = (
-                f"¡Listo! Programé recordatorios diarios para *{med}* a las {times_str}.\n"
-                f"{'🧪 (Modo test: se revisa cada 5s.)' if TEST_MODE else ''}"
-            )
             list_responses.append(text_Message(number, body))
             session_states.pop(number, None)
+
+    # 4.3) Gestión de recordatorios existentes
+    elif text in ["mis recordatorios", "ver recordatorios", "recordatorios"]:
+        with REMINDERS_LOCK:
+            if number in MED_REMINDERS and MED_REMINDERS[number]:
+                reminders_list = []
+                for i, reminder in enumerate(MED_REMINDERS[number], 1):
+                    times_str = ", ".join(reminder["times"])
+                    reminders_list.append(f"{i}. *{reminder['name']}* - {times_str}")
+                
+                body = "📋 *Tus recordatorios activos:*\n\n" + "\n".join(reminders_list)
+                body += "\n\n💡 Para eliminar un recordatorio, escribe: *eliminar recordatorio [número]*"
+            else:
+                body = (
+                    "📭 No tienes recordatorios activos.\n\n"
+                    "💊 Para crear uno nuevo, escribe: *recordatorio de medicamento*"
+                )
+        list_responses.append(text_Message(number, body))
+
+    elif text.startswith("eliminar recordatorio"):
+        try:
+            # Extraer número del recordatorio a eliminar
+            parts = text.split()
+            if len(parts) >= 3 and parts[2].isdigit():
+                index = int(parts[2]) - 1
+                with REMINDERS_LOCK:
+                    if (number in MED_REMINDERS and 
+                        0 <= index < len(MED_REMINDERS[number])):
+                        removed = MED_REMINDERS[number].pop(index)
+                        body = f"✅ Recordatorio de *{removed['name']}* eliminado correctamente."
+                        
+                        # Si no quedan recordatorios, limpiar la entrada
+                        if not MED_REMINDERS[number]:
+                            del MED_REMINDERS[number]
+                    else:
+                        body = "❌ Número de recordatorio no válido. Usa *mis recordatorios* para ver la lista."
+            else:
+                body = "❌ Formato incorrecto. Ejemplo: *eliminar recordatorio 1*"
+        except Exception as e:
+            print(f"Error eliminando recordatorio: {e}")
+            body = "❌ Error eliminando recordatorio. Inténtalo de nuevo."
+        
+        list_responses.append(text_Message(number, body))
 
             
     # 5) Inicio de orientación de síntomas
@@ -2139,7 +2061,7 @@ def administrar_chatbot(text, number, messageId, name):
             "Músculo 💪",
             "Salud Mental 🧘",
             "Dermatologicas 🩹",
-            "ver más ➡️",
+            "Ver más ➡️",
         ]
         enviar_Mensaje_whatsapp(
             listReply_Message(number, opts, body, footer, "orientacion_categorias", messageId)
@@ -2147,7 +2069,7 @@ def administrar_chatbot(text, number, messageId, name):
         return
 
     # 5.1) Paginación: si el usuario elige "Ver más ➡️", mostramos las categorías adicionales
-    elif text in ("ver mas ➡️", "ver más ➡️"):
+    elif text == "ver más ➡️":
         opts2 = [
             "Ginecológicas 👩‍⚕️",
             "Digestivas 🍽️",
@@ -2192,8 +2114,6 @@ def administrar_chatbot(text, number, messageId, name):
 
     # Nuevas opciones del menú "Más opciones"
     elif text == "explicador de documentos":
-        # TODO: Implementar sesión de estado para explicador de documentos
-        # TODO: Añadir handler para procesamiento de imágenes/texto de documentos médicos
         list_responses.append(text_Message(
             number,
             "📄 *Explicador de Documentos*\n"
@@ -2205,8 +2125,6 @@ def administrar_chatbot(text, number, messageId, name):
         ))
 
     elif text == "stock de medicamentos":
-        # TODO: Implementar integración con API de farmacias para consulta de stock real
-        # TODO: Añadir sesión de estado para búsqueda de medicamentos
         list_responses.append(text_Message(
             number,
             "💊 *Stock de Medicamentos*\n"
@@ -2218,8 +2136,6 @@ def administrar_chatbot(text, number, messageId, name):
         ))
 
     elif text == "derivaciones/seguimiento":
-        # TODO: Implementar integración con sistema de gestión hospitalaria
-        # TODO: Añadir sesión de estado para seguimiento de derivaciones
         list_responses.append(text_Message(
             number,
             "🧭 *Derivaciones y Seguimiento*\n"
@@ -2230,6 +2146,33 @@ def administrar_chatbot(text, number, messageId, name):
             "• Recordatorios de controles\n\n"
             "¿Qué quieres revisar?"
         ))
+
+    elif text == "gestionar recordatorios":
+        with REMINDERS_LOCK:
+            if number in MED_REMINDERS and MED_REMINDERS[number]:
+                reminders_list = []
+                for i, reminder in enumerate(MED_REMINDERS[number], 1):
+                    times_str = ", ".join(reminder["times"])
+                    reminders_list.append(f"{i}. *{reminder['name']}* - {times_str}")
+                
+                body = (
+                    "⏰ *Gestión de Recordatorios*\n\n"
+                    "📋 *Tus recordatorios activos:*\n" + "\n".join(reminders_list) +
+                    "\n\n💡 *Opciones disponibles:*\n"
+                    "• *recordatorio de medicamento* - Crear nuevo\n"
+                    "• *eliminar recordatorio [número]* - Eliminar específico\n"
+                    "• *mis recordatorios* - Ver lista completa"
+                )
+            else:
+                body = (
+                    "⏰ *Gestión de Recordatorios*\n\n"
+                    "📭 No tienes recordatorios activos.\n\n"
+                    "💡 *Para empezar:*\n"
+                    "• Escribe: *recordatorio de medicamento*\n"
+                    "• Te guiaré paso a paso para configurar recordatorios automáticos\n"
+                    "• Recibirás notificaciones en los horarios que elijas 🔔"
+                )
+        list_responses.append(text_Message(number, body))
 
     # 7) Agradecimientos y despedidas
     elif any(w in text for w in ["gracias", "muchas gracias"]):
@@ -2250,4 +2193,104 @@ def administrar_chatbot(text, number, messageId, name):
         if payload and payload.strip():
             enviar_Mensaje_whatsapp(payload)
         if i < len(list_responses) - 1:
-            time.sleep(0.2)
+            time.sleep(1)
+
+
+# ===================================================================
+# SISTEMA DE RECORDATORIOS DE MEDICAMENTOS
+# ===================================================================
+
+def _reminder_scheduler_loop():
+    """Hilo en segundo plano que verifica recordatorios cada minuto."""
+    while True:
+        try:
+            now = _now_hhmm_local()  # respeta TZ Chile si hay pytz
+            with REMINDERS_LOCK:
+                for number, items in list(MED_REMINDERS.items()):
+                    for r in items:
+                        if now in r["times"] and r.get("last") != now:
+                            med_name = r["name"]
+                            msg = (
+                                f"⏰ *Recordatorio de medicamento*\n"
+                                f"Es hora de tomar: *{med_name}*."
+                            )
+                            try:
+                                enviar_Mensaje_whatsapp(text_Message(number, msg))
+                                r["last"] = now
+                            except Exception as e:
+                                print(f"[reminder-thread] error al enviar: {e}")
+        except Exception as e:
+            print(f"[reminder-thread] excepción: {e}")
+        
+        time.sleep(60)  # revisar cada minuto
+
+
+def _start_reminder_scheduler_once():
+    """Arranca el hilo del scheduler solo una vez (idempotente)."""
+    global REMINDER_THREAD_STARTED
+    if not REMINDER_THREAD_STARTED:
+        REMINDER_THREAD_STARTED = True
+        t = threading.Thread(target=_reminder_scheduler_loop, daemon=True)
+        t.start()
+        print("🕐 Hilo de recordatorios iniciado.")
+
+
+def start_reminder_scheduler():
+    """Arranca el hilo del scheduler (idempotente)."""
+    _start_reminder_scheduler_once()
+
+
+def register_medication_reminder(number, med_name, times_list):
+    """
+    Registra un recordatorio de medicamento.
+    
+    Args:
+        number (str): Número de WhatsApp
+        med_name (str): Nombre del medicamento
+        times_list (list): Lista de horarios en formato "HH:MM"
+    """
+    _start_reminder_scheduler_once()  # auto-start
+    
+    with REMINDERS_LOCK:
+        if number not in MED_REMINDERS:
+            MED_REMINDERS[number] = []
+        
+        # Verificar si ya existe este medicamento
+        for item in MED_REMINDERS[number]:
+            if item["name"] == med_name:
+                item["times"] = times_list
+                item["last"] = ""
+                return
+        
+        # Agregar nuevo recordatorio
+        MED_REMINDERS[number].append({
+            "name": med_name,
+            "times": times_list,
+            "last": ""
+        })
+
+
+def send_due_reminders():
+    """
+    Ejecuta UNA pasada de verificación/envío de recordatorios pendientes.
+    Es la versión 'sin hilo' para ser llamada por un CRON o endpoint HTTP.
+    """
+    try:
+        now = _now_hhmm_local() if 'DEFAULT_TZ' in globals() else datetime.now().strftime("%H:%M")
+        with REMINDERS_LOCK:
+            for number, items in list(MED_REMINDERS.items()):
+                for r in items:
+                    if now in r["times"] and r.get("last") != now:
+                        med_name = r["name"]
+                        msg = (
+                            f"⏰ *Recordatorio de medicamento*\n"
+                            f"Es hora de tomar: *{med_name}*."
+                        )
+                        try:
+                            enviar_Mensaje_whatsapp(text_Message(number, msg))
+                            r["last"] = now
+                        except Exception as e:
+                            print(f"[cron-reminders] error al enviar: {e}")
+    except Exception as e:
+        print(f"[cron-reminders] excepción: {e}")
+        raise
