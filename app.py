@@ -80,5 +80,8 @@ def cron_reminders():
 # ==========================================================================
 
 if __name__ == '__main__':
+    # Arranca el hilo del scheduler desde el inicio (idempotente)
+    services.start_reminder_scheduler()
+    
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
