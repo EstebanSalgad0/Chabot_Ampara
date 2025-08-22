@@ -299,11 +299,38 @@ def buttonReply_Message(number, options, body, footer, sedd, messageId):
 
 
 def listReply_Message(number, options, body, footer, sedd, messageId):
+    """
+    options puede traer:
+      - ["Título corto", "Otro título"]
+      - [("Título", "Descripción"), ("Título2", "Desc2")]
+    Siempre se fuerza: title<=24, description<=72
+    """
+    MAX_TITLE = 24
+    MAX_DESC = 72
+
     rows = []
     for i, opt in enumerate(options):
-        title = opt if len(opt) <= 24 else opt[:24]
-        desc = "" if len(opt) <= 24 else opt
-        rows.append({"id": f"{sedd}_row_{i+1}", "title": title, "description": desc})
+        if isinstance(opt, (list, tuple)):
+            title = str(opt[0]) if len(opt) > 0 else ""
+            desc  = str(opt[1]) if len(opt) > 1 else ""
+        else:
+            # Si solo llega un string, úsalo como título y deja desc vacía
+            title = str(opt)
+            desc  = ""
+
+        # Si el string era largo y no se dio descripción, reparte el sobrante a desc
+        if not desc and len(title) > MAX_TITLE:
+            desc = title[MAX_TITLE:]
+        # Recortes hard por políticas WA
+        title = title[:MAX_TITLE]
+        desc  = desc[:MAX_DESC]
+
+        rows.append({
+            "id": f"{sedd}_row_{i+1}",
+            "title": title,
+            "description": desc
+        })
+
     return json.dumps({
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
@@ -1750,11 +1777,11 @@ def administrar_chatbot(text, number, messageId, name):
         body = "Más opciones de ayuda:"
         footer = "MedicAI"
         opciones_mas = [
-            "🩺 Orientación de Síntomas — evaluación preliminar y recomendaciones",
-            "🧾 Guía de Ruta / Derivaciones — pasos en SOME, GES y urgencias",
-            "📄 Explicador de Documentos — interpreta recetas, exámenes e interconsultas",
-            "💊 Stock de Medicamentos — disponibilidad y alternativas genéricas",
-            "🧭 Derivaciones / Seguimiento — estado de interconsultas, exámenes y citas"
+            ("🩺 Orientación de Síntomas", "Evaluación preliminar con recomendaciones"),
+            ("🧾 Guía de Ruta / Derivaciones", "Pasos en SOME, GES y urgencias"),
+            ("📄 Explicador de Documentos", "Interpreta recetas, exámenes e interconsultas"),
+            ("💊 Stock de Medicamentos", "Disponibilidad cercana y genéricos"),
+            ("🧭 Derivaciones / Seguimiento", "Estado de interconsultas, exámenes y citas")
         ]
         list_responses.append(
             listReply_Message(number, opciones_mas, body, footer, "menu_mas", messageId)
