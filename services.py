@@ -4,6 +4,7 @@ import json
 import time
 import random
 import unicodedata
+import os
 from datetime import datetime
 import threading
 
@@ -13,7 +14,7 @@ try:
 except Exception:
     pytz = None
 
-DEFAULT_TZ = "America/Santiago"
+DEFAULT_TZ = os.getenv("TZ", "America/Santiago")
 
 def _now_hhmm_local(tz_name: str = DEFAULT_TZ) -> str:
     if pytz:
@@ -1350,8 +1351,7 @@ def administrar_chatbot(text, number, messageId, name):
         "menu_mas_row_2": "guia de ruta",
         "menu_mas_row_3": "explicador de documentos",
         "menu_mas_row_4": "stock de medicamentos",
-        "menu_mas_row_5": "derivaciones/seguimiento",
-        "menu_mas_row_6": "gestionar recordatorios",
+        "menu_mas_row_5": "gestionar recordatorios",
 
         # Especialidades – página 1
         "cita_especialidad_row_1": "medicina general",
@@ -1752,7 +1752,6 @@ def administrar_chatbot(text, number, messageId, name):
             "🧾 Guía de Ruta / Derivaciones",
             "📄 Explicador de Documentos",
             "💊 Stock de Medicamentos",
-            "🧭 Derivaciones / Seguimiento",
             "⏰ Gestionar Recordatorios"
         ]
         list_responses.append(
@@ -2135,18 +2134,6 @@ def administrar_chatbot(text, number, messageId, name):
             "¿Qué medicamento necesitas consultar?"
         ))
 
-    elif text == "derivaciones/seguimiento":
-        list_responses.append(text_Message(
-            number,
-            "🧭 *Derivaciones y Seguimiento*\n"
-            "Te ayudo con el seguimiento de:\n"
-            "• Estado de interconsultas\n"
-            "• Resultados de exámenes\n"
-            "• Fechas de citas programadas\n"
-            "• Recordatorios de controles\n\n"
-            "¿Qué quieres revisar?"
-        ))
-
     elif text == "gestionar recordatorios":
         with REMINDERS_LOCK:
             if number in MED_REMINDERS and MED_REMINDERS[number]:
@@ -2202,6 +2189,7 @@ def administrar_chatbot(text, number, messageId, name):
 
 def _reminder_scheduler_loop():
     """Hilo en segundo plano que verifica recordatorios cada minuto."""
+    print("🕐 Reminder loop corriendo (1m)…")
     while True:
         try:
             now = _now_hhmm_local()  # respeta TZ Chile si hay pytz
