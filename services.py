@@ -4,23 +4,39 @@ import json
 import time
 import random
 import unicodedata
-import os
-from datetime import datetime
+from datetime import datetime, timezone
 import threading
+import os
 
-# --- TZ helper (opcional) ---
+# --- Zona horaria robusta ---
+# 1) Usa env APP_TZ si está presente; si no, America/Santiago
+DEFAULT_TZ = os.getenv("APP_TZ", "America/Santiago")
+
+# 2) Intenta zoneinfo (builtin en Python 3.9+). Si no, intenta pytz. Si no, cae a UTC.
 try:
-    import pytz
+    from zoneinfo import ZoneInfo  # Python 3.9+
+except Exception:
+    ZoneInfo = None
+
+try:
+    import pytz  # opcional
 except Exception:
     pytz = None
 
-DEFAULT_TZ = os.getenv("TZ", "America/Santiago")
-
 def _now_hhmm_local(tz_name: str = DEFAULT_TZ) -> str:
-    if pytz:
-        tz = pytz.timezone(tz_name)
-        return datetime.now(tz).strftime("%H:%M")
-    return datetime.now().strftime("%H:%M")
+    """
+    Devuelve HH:MM en la zona horaria indicada.
+    Prioriza zoneinfo (si está), luego pytz. 
+    Si nada está disponible, usa UTC para que sea determinístico.
+    """
+    try:
+        if ZoneInfo is not None:
+            return datetime.now(ZoneInfo(tz_name)).strftime("%H:%M")
+        if pytz is not None:
+            return datetime.now(pytz.timezone(tz_name)).strftime("%H:%M")
+    except Exception:
+        pass  # si falla el tz_name, cae a UTC
+    return datetime.now(timezone.utc).strftime("%H:%M")
 
 def normalize_text(t: str) -> str:
     t = t.lower()
@@ -2019,6 +2035,27 @@ def administrar_chatbot(text, number, messageId, name):
                     "💊 Para crear uno nuevo, escribe: *recordatorio de medicamento*"
                 )
         list_responses.append(text_Message(number, body))
+
+    elif text == "debug hora":
+        ahora = _now_hhmm_local()
+        list_responses.append(text_Message(number, f"🕒 Hora servidor usada para recordatorios: {ahora} ({DEFAULT_TZ})"))
+
+    elif text == "test en 1 min":
+        from datetime import timedelta
+        # calcula HH:MM + 1 minuto, redondeando al minuto siguiente
+        if ZoneInfo is not None:
+            tz = ZoneInfo(DEFAULT_TZ)
+            now = datetime.now(tz)
+        elif pytz is not None:
+            tz = pytz.timezone(DEFAULT_TZ)
+            now = datetime.now(tz)
+        else:
+            tz = timezone.utc
+            now = datetime.now(tz)
+
+        target = (now + timedelta(minutes=1)).strftime("%H:%M")
+        register_medication_reminder(number, "PRUEBA", [target])
+        list_responses.append(text_Message(number, f"⏰ Programado recordatorio de PRUEBA para las {target}"))
 
     elif text.startswith("eliminar recordatorio"):
         try:
