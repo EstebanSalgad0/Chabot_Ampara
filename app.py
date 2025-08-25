@@ -1,10 +1,13 @@
 # app.py
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request
 import sett
 import services
 
 app = Flask(__name__)
+
+# 👉 Inicia el scheduler APENAS se levanta la app (sin depender de __main__)
+services.start_reminder_scheduler()
 
 @app.route('/bienvenido', methods=['GET'])
 def bienvenido():
@@ -48,12 +51,11 @@ def recibir_mensaje():
             else:
                 text = services.obtener_Mensaje_whatsapp(message)
         else:
-            # Soporta text, image, document, button, etc. (lo maneja services.obtener_Mensaje_whatsapp)
+            # Soporta text, image, document, button, etc.
             text = services.obtener_Mensaje_whatsapp(message)
         # --------------------------------------
 
         print(f"📨 Mensaje de {number} ({name}): {text}")
-
         services.administrar_chatbot(text, number, messageId, name)
         return 'Enviado', 200
 
@@ -64,24 +66,7 @@ def recibir_mensaje():
         print("❌ ERROR procesando webhook:", e)
         return str(e), 500
 
-# ===== Endpoint para ejecutar recordatorios pendientes (usar con CRON) =====
-@app.route('/tasks/cron-reminders', methods=['GET'])
-def cron_reminders():
-    """
-    Dispara el envío de recordatorios de citas que estén vencidos (pendientes de enviar).
-    Llama internamente a services.send_due_reminders().
-    """
-    try:
-        services.send_due_reminders()
-        return jsonify({"ok": True}), 200
-    except Exception as e:
-        print("❌ ERROR en cron-reminders:", e)
-        return jsonify({"ok": False, "error": str(e)}), 500
-# ==========================================================================
-
 if __name__ == '__main__':
-    # Arranca el hilo del scheduler desde el inicio (idempotente)
-    services.start_reminder_scheduler()
-    
+    # Para entorno local
     port = int(os.getenv('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
