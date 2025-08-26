@@ -7,6 +7,7 @@ import unicodedata
 from datetime import datetime, timezone
 import threading
 import os
+import sqlite3
 
 # --- Zona horaria robusta ---
 # 1) Usa env APP_TZ si está presente; si no, America/Santiago
@@ -37,6 +38,50 @@ def _now_hhmm_local(tz_name: str = DEFAULT_TZ) -> str:
     except Exception:
         pass  # si falla el tz_name, cae a UTC
     return datetime.now(timezone.utc).strftime("%H:%M")
+
+# ===================================================================
+# BASE DE DATOS - STOCK Y RETIROS
+# ===================================================================
+
+DB_PATH = os.getenv("MEDICAI_DB", "medicai.db")
+
+def db_conn():
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
+
+def db_init():
+    with db_conn() as cx:
+        cx.execute(
+            """
+            CREATE TABLE IF NOT EXISTS meds (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE COLLATE NOCASE,
+                stock INTEGER DEFAULT 0,
+                location TEXT,
+                price INTEGER
+            )
+            """
+        )
+        cx.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pickups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                number TEXT,
+                drug TEXT,
+                date TEXT,
+                hour TEXT,
+                freq_days INTEGER,
+                status TEXT,
+                created_at TEXT
+            )
+            """
+        )
+        cx.execute("CREATE INDEX IF NOT EXISTS idx_meds_name ON meds(name)")
+        cx.execute("CREATE INDEX IF NOT EXISTS idx_pickups_num ON pickups(number)")
+        cx.execute("CREATE INDEX IF NOT EXISTS idx_pickups_date ON pickups(date)")
+        print("🗄️ DB lista:", DB_PATH)
+
+# Inicializa DB al cargar el módulo
+db_init()
 
 def normalize_text(t: str) -> str:
     t = t.lower()
@@ -142,6 +187,16 @@ REMINDERS_LOCK = threading.Lock()
 
 global REMINDER_THREAD_STARTED
 REMINDER_THREAD_STARTED = False
+
+# -----------------------------------------------------------
+# Estado para Stock & Retiros
+# -----------------------------------------------------------
+global stock_sessions
+stock_sessions = {}  # { number: { step, drug_name, freq_days, hour, ... } }
+
+# Vinculación retiro -> adherencia
+global LAST_RETIRED_DRUG
+LAST_RETIRED_DRUG = {}  # { number: "Nombre del medicamento" }
 
 # -----------------------------------------------------------
 # Ejemplos de síntomas personalizados por categoría
@@ -288,6 +343,151 @@ def obtener_Mensaje_whatsapp(message):
         elif interactive['type'] == 'button_reply':
             return interactive['button_reply']['id']
     return 'mensaje no procesado'
+
+# ===================================================================
+# HELPERS DE NEGOCIO - STOCK & PICKUPS
+# ===================================================================
+
+# ============ STOCK ============
+def stock_add_or_update(name: str, qty: int, location: str = None, price: int = None):
+    with db_conn() as cx:
+        cur = cx.execute("SELECT id FROM meds WHERE name=?", (name,))
+        if cur.fetchone():
+            cx.execute(
+                "UPDATE meds SET stock = stock + ?, location=COALESCE(?,location), price=COALESCE(?,price) WHERE name=?",
+                (qty, location, price, name)
+            )
+        else:
+            cx.execute(
+                "INSERT INTO meds(name, stock, location, price) VALUES(?,?,?,?)",
+                (name, max(0, qty), location, price)
+            )
+
+def stock_get(name: str):
+    with db_conn() as cx:
+        cur = cx.execute(
+            "SELECT name, stock, COALESCE(location,''), COALESCE(price,0) FROM meds WHERE name=?",
+            (name,)
+        )
+        return cur.fetchone()  # None | (name, stock, location, price)
+
+def stock_decrement(name: str, qty: int):
+    with db_conn() as cx:
+        cx.execute(
+            "UPDATE meds SET stock = CASE WHEN stock-? < 0 THEN 0 ELSE stock-? END WHERE name=?",
+            (qty, qty, name)
+        )
+
+# ============ PICKUPS (retiros) ============
+def pickup_schedule_day(number: str, drug: str, date_iso: str, hour_hhmm: str):
+    with db_conn() as cx:
+        cx.execute(
+            """INSERT INTO pickups(number,drug,date,hour,freq_days,status,created_at)
+               VALUES(?,?,?,?,NULL,'pending',datetime('now'))""",
+            (number, drug, date_iso, hour_hhmm)
+        )
+
+def pickup_schedule_cycle(number: str, drug: str, first_date: str, hour_hhmm: str, freq_days: int):
+    with db_conn() as cx:
+        cx.execute(
+            """INSERT INTO pickups(number,drug,date,hour,freq_days,status,created_at)
+               VALUES(?,?,?,?,?,'pending',datetime('now'))""",
+            (number, drug, first_date, hour_hhmm, int(freq_days))
+        )
+
+def pickup_next_for(number: str, drug: str):
+    with db_conn() as cx:
+        cur = cx.execute(
+            """SELECT id, drug, date, hour, COALESCE(freq_days,0), status
+               FROM pickups
+               WHERE number=? AND drug=? AND status='pending'
+               ORDER BY date ASC LIMIT 1""",
+            (number, drug)
+        )
+        return cur.fetchone()
+
+def pickup_mark(number: str, drug: str, done: bool):
+    with db_conn() as cx:
+        cur = cx.execute(
+            """SELECT id, date, hour, COALESCE(freq_days,0)
+               FROM pickups
+               WHERE number=? AND drug=? AND status='pending'
+               ORDER BY date ASC LIMIT 1""",
+            (number, drug)
+        )
+        row = cur.fetchone()
+        if not row:
+            return False
+        
+        pid, date_iso, hour, freq = row
+        
+        if done and freq > 0:
+            # cerrar actual y crear siguiente
+            cx.execute("UPDATE pickups SET status='done' WHERE id=?", (pid,))
+            from datetime import datetime as _dt, timedelta as _td
+            nxt = (_dt.fromisoformat(date_iso).date() + _td(days=freq)).isoformat()
+            cx.execute(
+                """INSERT INTO pickups(number,drug,date,hour,freq_days,status,created_at)
+                   VALUES(?,?,?,?,?,'pending',datetime('now'))""",
+                (number, drug, nxt, hour, freq)
+            )
+            return True
+        else:
+            cx.execute("UPDATE pickups SET status=? WHERE id=?", ('done' if done else 'missed', pid))
+            return True
+
+def pickup_list(number: str):
+    with db_conn() as cx:
+        cur = cx.execute(
+            """SELECT drug, date, hour, COALESCE(freq_days,0), status
+               FROM pickups
+               WHERE number=?
+               ORDER BY date ASC""",
+            (number,)
+        )
+        return cur.fetchall()
+
+# ============ HELPERS DEL FLUJO ============
+def _parse_freq_to_days(txt: str) -> int:
+    t = normalize_text(txt)
+    if "30" in t:
+        return 30
+    if "15" in t:
+        return 15
+    import re
+    m = re.search(r"(\d+)\s*d(i|í)as", t)
+    if m:
+        return max(1, int(m.group(1)))
+    return 30
+
+def _safe_today_tz(tz_name: str = DEFAULT_TZ):
+    try:
+        if ZoneInfo is not None:
+            return datetime.now(ZoneInfo(tz_name)).date()
+        if pytz is not None:
+            return datetime.now(pytz.timezone(tz_name)).date()
+    except Exception:
+        pass
+    return datetime.now(timezone.utc).date()
+
+def _hhmm_or_default(txt: str, default="08:00") -> str:
+    import re
+    m = re.search(r"\b(\d{1,2}):(\d{2})\b", txt)
+    if not m:
+        return default
+    return f"{m.group(1).zfill(2)}:{m.group(2)}"
+
+def check_stock_api(drug_name: str) -> str:
+    """
+    Stub de conexión. Retorna: 'available' | 'low' | 'none' | 'unknown'.
+    Integra aquí Rayen/Medipro cuando tengas endpoint.
+    """
+    name = normalize_text(drug_name)
+    if any(k in name for k in ["paracetamol", "metformina", "losartan", "losartán"]):
+        return "available"
+    if "amoxicilina" in name:
+        return "low"
+    return "unknown"
 
 
 def enviar_Mensaje_whatsapp(data):
@@ -1434,6 +1634,23 @@ def administrar_chatbot(text, number, messageId, name):
         # Orientación de síntomas – página 2
         "orientacion_categorias2_row_1": "orientacion_ginecologico_extraccion",
         "orientacion_categorias2_row_2": "orientacion_digestivo_extraccion",
+
+        # --- Stock / Retiro de Medicamentos ---
+        "stock_activa_row_1": "stock_si",
+        "stock_activa_row_2": "stock_no_se",
+        "stock_activa_row_3": "stock_no",
+        "stock_freq_row_1": "cada 30 dias",
+        "stock_freq_row_2": "cada 15 dias",
+        "stock_freq_row_3": "otra frecuencia",
+        "stock_pickup_btn_1": "pickup_confirm_si",
+        "stock_pickup_btn_2": "pickup_confirm_no",
+        "stock_pickup_btn_3": "pickup_cuidador",
+        "stock_problem_row_1": "prob_sin_stock",
+        "stock_problem_row_2": "prob_retraso",
+        "stock_problem_row_3": "prob_no_entendi",
+        "stock_problem_row_4": "prob_otro",
+        "stock_link_btn_1": "vincular_adherencia_si",
+        "stock_link_btn_2": "vincular_adherencia_no",
     }
 
     # 👉 APLICA EL MAPEO **ANTES** DE CUALQUIER LÓGICA
@@ -1742,9 +1959,37 @@ def administrar_chatbot(text, number, messageId, name):
             "1️⃣ Agendar Cita Médica\n"
             "2️⃣ Recordatorio de Medicamento\n"
             "3️⃣ Más opciones\n\n"
-            "💡 *Comandos útiles:*\n"
+            "💡 *Comandos útiles disponibles:*\n\n"
+            "� *MEDICAMENTOS & ADHERENCIA*\n"
+            "• *recordatorio de medicamento* - Crear recordatorio\n"
             "• *mis recordatorios* - Ver recordatorios activos\n"
-            "• *eliminar recordatorio [número]* - Eliminar recordatorio"
+            "• *eliminar recordatorio [N°]* - Eliminar recordatorio\n"
+            "• *gestionar recordatorios* - Panel completo\n"
+            "• *vincular tomas [med] HH:MM* - Vincular horarios\n\n"
+            
+            "🏥 *RETIROS & STOCK*\n"
+            "• *stock de medicamentos* - Gestión de retiros\n"
+            "• *mis retiros* - Ver retiros programados\n"
+            "• *retire [medicamento] si|no* - Confirmar retiro\n"
+            "• *programar retiro [med] [fecha] [hora]* - Agendar\n"
+            "• *programar ciclo [med] [fecha] [hora] cada [días]* - Ciclos\n"
+            "• *stock ver [medicamento]* - Consultar disponibilidad\n"
+            "• *stock agregar [med] [cantidad]* - Incrementar stock\n"
+            "• *stock bajar [med] [cantidad]* - Decrementar stock\n\n"
+            
+            "�️ *CITAS & NAVEGACIÓN*\n"
+            "• *debug hora* - Ver hora del servidor\n"
+            "• *test en 1 min* - Probar recordatorio inmediato\n\n"
+            "� *Stock y Retiros:*\n"
+            "• *stock de medicamentos* - Gestión de retiros\n"
+            "• *mis retiros* - Ver retiros programados\n"
+            "• *retire [medicamento] si|no* - Confirmar retiro\n"
+            "• *programar retiro [med] [fecha] [hora]* - Agendar\n"
+            "• *stock ver [medicamento]* - Consultar stock\n\n"
+            "�🚨 *Emergencias:*\n"
+            "• *ayuda urgente* - Números de emergencia\n"
+            "💡 *Tip:* Escribe *comandos* para ver todos los comandos disponibles.\n"
+            "🤖 *¡Escribe cualquier comando para empezar!*"
         )
         footer = "MedicAI"
         opts = [
@@ -2036,6 +2281,47 @@ def administrar_chatbot(text, number, messageId, name):
                 )
         list_responses.append(text_Message(number, body))
 
+    elif text in ["comandos", "comando", "ayuda comandos", "ver comandos"]:
+        body = (
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💡 *COMANDOS DISPONIBLES*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            
+            "💊 *MEDICAMENTOS & ADHERENCIA*\n"
+            "• *recordatorio de medicamento* - Crear recordatorio\n"
+            "• *mis recordatorios* - Ver recordatorios activos\n"
+            "• *eliminar recordatorio [N°]* - Eliminar recordatorio\n"
+            "• *gestionar recordatorios* - Panel completo\n"
+            "• *vincular tomas [med] HH:MM* - Vincular horarios\n\n"
+            
+            "🏥 *RETIROS & STOCK*\n"
+            "• *stock de medicamentos* - Gestión de retiros\n"
+            "• *mis retiros* - Ver retiros programados\n"
+            "• *retire [medicamento] si|no* - Confirmar retiro\n"
+            "• *programar retiro [med] [fecha] [hora]* - Agendar\n"
+            "• *programar ciclo [med] [fecha] [hora] cada [días]* - Ciclos\n"
+            "• *stock ver [medicamento]* - Consultar disponibilidad\n"
+            "• *stock agregar [med] [cantidad]* - Incrementar stock\n"
+            "• *stock bajar [med] [cantidad]* - Decrementar stock\n\n"
+            
+            "🗓️ *CITAS & NAVEGACIÓN*\n"
+            "• *agendar cita* - Programar atención médica\n"
+            "• *guía de ruta* - Derivaciones/interconsultas\n"
+            "• *orientación de síntomas* - Diagnóstico orientativo\n\n"
+            
+            "🔧 *HERRAMIENTAS*\n"
+            "• *debug hora* - Ver hora del servidor\n"
+            "• *test en 1 min* - Probar recordatorio inmediato\n\n"
+            
+            "🚨 *EMERGENCIAS*\n"
+            "• *ayuda urgente* - Números de emergencia\n"
+            "• *urgente* - Contactos SAMU/Bomberos\n\n"
+            
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🤖 *¡Copia y pega cualquier comando para usarlo!*"
+        )
+        list_responses.append(text_Message(number, body))
+
     elif text == "debug hora":
         ahora = _now_hhmm_local()
         list_responses.append(text_Message(number, f"🕒 Hora servidor usada para recordatorios: {ahora} ({DEFAULT_TZ})"))
@@ -2161,15 +2447,87 @@ def administrar_chatbot(text, number, messageId, name):
         ))
 
     elif text == "stock de medicamentos":
-        list_responses.append(text_Message(
-            number,
-            "💊 *Stock de Medicamentos*\n"
-            "Servicio para consultar disponibilidad de medicamentos:\n"
-            "• Consulta stock en farmacias cercanas\n"
-            "• Precios comparativos\n"
-            "• Medicamentos genéricos alternativos\n\n"
-            "¿Qué medicamento necesitas consultar?"
-        ))
+        stock_sessions[number] = {"step": "activate"}
+        body = ("💊 *Gestión de Retiro de Medicamentos*\n"
+                "¿Tienes una *receta activa* que aún no has retirado?")
+        opts = ["Sí", "No lo sé", "No"]
+        list_responses.append(listReply_Message(number, opts, body, "Stock", "stock_activa", messageId))
+
+    # 6.2) Secuencia del flujo de stock
+    elif number in stock_sessions:
+        ss = stock_sessions[number]
+        step = ss.get("step")
+        
+        # MÓDULO 1 → respuesta de activación
+        if step == "activate":
+            if text in ("stock_si", "stock_no_se"):
+                ss["step"] = "ask_drug"
+                list_responses.append(text_Message(
+                    number,
+                    "💊 Dime el *nombre del medicamento* o envía *foto clara de la receta*."
+                ))
+            else:
+                list_responses.append(text_Message(number,
+                    "Entendido. Cuando tengas una receta activa, vuelve a escribirme."))
+                stock_sessions.pop(number, None)
+        
+        # MÓDULO 2 → identificación del fármaco
+        elif step == "ask_drug":
+            ss["drug_name"] = text
+            ss["step"] = "check_availability"
+            list_responses.append(text_Message(number, "🔍 Estoy revisando disponibilidad…"))
+            status = check_stock_api(ss["drug_name"])
+            
+            # MÓDULO 3 → verificación
+            if status == "available":
+                list_responses.append(text_Message(number, f"✅ *{ss['drug_name']}* está *disponible*."))
+            elif status == "low":
+                list_responses.append(text_Message(number, f"⚠️ Queda *poco stock* de *{ss['drug_name']}*. Se recomienda acudir pronto."))
+            elif status == "none":
+                list_responses.append(text_Message(number, f"❌ No hay stock de *{ss['drug_name']}* por ahora. ¿Quieres que te avise cuando haya?"))
+            else:
+                list_responses.append(text_Message(
+                    number,
+                    ("🤷‍♂️ No tengo acceso en línea al sistema de farmacia. "
+                     "¿Quieres que *programe recordatorios* para no olvidar el retiro?")
+                ))
+            
+            # Configurar frecuencia
+            ss["step"] = "ask_freq"
+            opts = ["Cada 30 días", "Cada 15 días", "Otra frecuencia"]
+            list_responses.append(listReply_Message(number, opts, "¿Cada cuánto te corresponde retirar?", "Frecuencia de retiro", "stock_freq", messageId))
+        
+        # MÓDULO 4 → frecuencia y hora
+        elif step == "ask_freq":
+            ss["freq_days"] = _parse_freq_to_days(text)
+            ss["step"] = "ask_hour"
+            list_responses.append(text_Message(number, "⏰ ¿A qué *hora* te recuerdo? (24h, ej: 08:00)"))
+        
+        elif step == "ask_hour":
+            hour = _hhmm_or_default(text, "08:00")
+            ss["hour"] = hour
+            # Programación inicial vía DB: primera fecha = hoy + freq_days
+            from datetime import timedelta as _td
+            first_date = (_safe_today_tz() + _td(days=ss["freq_days"]))
+            pickup_schedule_cycle(number, ss["drug_name"], first_date.isoformat(), hour, ss["freq_days"])
+            list_responses.append(text_Message(
+                number,
+                f"✅ Listo. Te recordaré *{ss['drug_name']}* cada *{ss['freq_days']} días* a las *{hour}*.\n"
+                "📢 Aviso *3 días antes* y el *día del retiro*."
+            ))
+            ss["step"] = "wait_pickup"
+            list_responses.append(text_Message(
+                number,
+                "📝 Cuando llegue la fecha, te preguntaré: *¿Pudiste retirar?*\n"
+                "También puedes registrar manual: *retire [nombre] si|no*."
+            ))
+        
+        elif step == "wait_pickup":
+            if text.startswith("retire "):
+                list_responses.append(text_Message(number, "✅ Ok, registraré tu respuesta."))
+            else:
+                list_responses.append(text_Message(number, "👍 Perfecto. Te avisaré en la fecha programada."))
+            stock_sessions.pop(number, None)
 
     elif text == "gestionar recordatorios":
         with REMINDERS_LOCK:
@@ -2197,6 +2555,174 @@ def administrar_chatbot(text, number, messageId, name):
                     "• Recibirás notificaciones en los horarios que elijas 🔔"
                 )
         list_responses.append(text_Message(number, body))
+
+    # === COMANDOS DE STOCK Y RETIROS ===
+    
+    # === STOCK: Alta/Resta/Consulta ===
+    elif text.startswith("stock agregar "):
+        try:
+            _, _, rest = text.partition("stock agregar ")
+            parts = rest.rsplit(" ", 1)
+            name = parts[0].strip()
+            qty = int(parts[1])
+            stock_add_or_update(name, qty)
+            list_responses.append(text_Message(number, f"📈 Stock de *{name}* incrementado en {qty}."))
+        except Exception:
+            list_responses.append(text_Message(number, "❌ Formato: *stock agregar [nombre] [cantidad]*"))
+
+    elif text.startswith("stock bajar "):
+        try:
+            _, _, rest = text.partition("stock bajar ")
+            parts = rest.rsplit(" ", 1)
+            name = parts[0].strip()
+            qty = int(parts[1])
+            stock_decrement(name, qty)
+            row = stock_get(name)
+            s = row[1] if row else 0
+            list_responses.append(text_Message(number, f"📉 Stock de *{name}* decrementado en {qty}. Queda: {s}."))
+        except Exception:
+            list_responses.append(text_Message(number, "❌ Formato: *stock bajar [nombre] [cantidad]*"))
+
+    elif text.startswith("stock ver "):
+        name = text.replace("stock ver", "", 1).strip()
+        row = stock_get(name)
+        if row:
+            name, s, loc, price = row
+            body = f"💊 *{name}*\nStock: {s}\nSede: {loc or 'N/D'}\nPrecio: {price or 'N/D'}"
+        else:
+            body = "❌ No tengo ese medicamento. Usa: *stock agregar [nombre] [cantidad]*"
+        list_responses.append(text_Message(number, body))
+
+    # === Programar retiro por fecha exacta ===
+    elif text.startswith("programar retiro "):
+        try:
+            _, _, rest = text.partition("programar retiro ")
+            parts = rest.split()
+            hour = parts[-1]
+            date_txt = parts[-2]
+            drug = " ".join(parts[:-2])
+            from datetime import datetime as _dt
+            date_iso = None
+            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+                try:
+                    d = _dt.strptime(date_txt, fmt).date()
+                    date_iso = d.isoformat()
+                    break
+                except:
+                    pass
+            if not date_iso:
+                list_responses.append(text_Message(number, "❌ Fecha inválida. Usa YYYY-MM-DD o DD-MM-YYYY."))
+            else:
+                hour = _hhmm_or_default(hour, "08:00")
+                pickup_schedule_day(number, drug, date_iso, hour)
+                list_responses.append(text_Message(number, f"📅 Agendado retiro de *{drug}* para *{date_iso}* a las *{hour}*."))
+        except Exception as e:
+            list_responses.append(text_Message(number, "❌ Formato: *programar retiro [medicamento] [fecha] [hora]*"))
+
+    # === Programar ciclo (15/30 días) ===
+    elif text.startswith("programar ciclo "):
+        try:
+            _, _, rest = text.partition("programar ciclo ")
+            tokens = rest.split()
+            if "cada" in tokens:
+                idx = tokens.index("cada")
+                freq = int(tokens[idx+1])
+                hour = tokens[idx-1]
+                date_txt = tokens[idx-2]
+                drug = " ".join(tokens[:idx-2])
+                from datetime import datetime as _dt
+                date_iso = None
+                for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+                    try:
+                        date_iso = _dt.strptime(date_txt, fmt).date().isoformat()
+                        break
+                    except:
+                        pass
+                if not date_iso:
+                    list_responses.append(text_Message(number, "❌ Fecha inválida. Usa YYYY-MM-DD o DD-MM-YYYY."))
+                else:
+                    hour = _hhmm_or_default(hour, "08:00")
+                    pickup_schedule_cycle(number, drug, date_iso, hour, freq)
+                    list_responses.append(text_Message(number, f"🔄 Ciclo creado: *{drug}* cada *{freq} días*, primera *{date_iso}* a las *{hour}*."))
+            else:
+                list_responses.append(text_Message(number, "❌ Formato: *programar ciclo [medicamento] [fecha] [hora] cada [días]*"))
+        except Exception as e:
+            list_responses.append(text_Message(number, "❌ Formato: *programar ciclo [medicamento] [fecha] [hora] cada [días]*"))
+
+    # === Confirmar retiro (y ofrecer vinculación a tomas) ===
+    elif text.startswith("retire "):
+        parts = text.split()
+        if len(parts) >= 3:
+            drug = " ".join(parts[1:-1])
+            ans = parts[-1]
+            done = ans in ("si", "sí")
+            ok = pickup_mark(number, drug, done)
+            if not ok:
+                list_responses.append(text_Message(number, f"❌ No encuentro retiro pendiente para *{drug}*."))
+            else:
+                if done:
+                    list_responses.append(text_Message(number, f"✅ Retiro registrado para *{drug}*."))
+                    LAST_RETIRED_DRUG[number] = drug
+                    list_responses.append(
+                        buttonReply_Message(
+                            number,
+                            ["Sí, vincular", "No, gracias"],
+                            "¿Deseas *vincular este medicamento* a recordatorios de *toma diaria*?",
+                            "Vincular con adherencia",
+                            "stock_link",
+                            messageId
+                        )
+                    )
+                else:
+                    list_responses.append(text_Message(number, f"📝 Marcado como no retirado: *{drug}*."))
+        else:
+            list_responses.append(text_Message(number, "❌ Usa: *retire [medicamento] si|no*"))
+
+    # === Vinculación a adherencia (tomas) ===
+    elif text == "vincular_adherencia_si":
+        med = LAST_RETIRED_DRUG.get(number)
+        if not med:
+            list_responses.append(text_Message(number, "❌ No tengo contexto. Usa: *vincular tomas [medicamento] HH:MM [HH:MM]*"))
+        else:
+            medication_sessions[number] = {"name": med}
+            session_states[number] = {"flow": "med", "step": "ask_freq"}
+            body = f"✅ Perfecto. Configuraremos tomas para *{med}*.\n¿Con qué frecuencia?"
+            opts = ["Una vez al día", "Dos veces al día", "Cada 8 horas", "Otro horario personalizado"]
+            list_responses.append(
+                listReply_Message(number, opts, body, "Recordatorio Medicamentos", "med_freq", messageId)
+            )
+
+    elif text == "vincular_adherencia_no":
+        list_responses.append(text_Message(number, "👍 Entendido. Mantendré solo el plan de *retiro*."))
+
+    elif text.startswith("vincular tomas "):
+        try:
+            raw = text.replace("vincular tomas", "", 1).strip()
+            parts = raw.split()
+            import re
+            times = [p for p in parts if re.match(r"^\d{1,2}:\d{2}$", p)]
+            name_tokens = [p for p in parts if p not in times]
+            med = " ".join(name_tokens).strip()
+            if not med or not times:
+                raise ValueError
+            times = [f"{h if len(h)==5 else h.zfill(5)}" for h in times]  # 8:00 -> 08:00
+            register_medication_reminder(number, med, times)
+            list_responses.append(text_Message(number, f"🔗 Vinculado. Recordatorios de *{med}* a las: {', '.join(times)}"))
+        except Exception:
+            list_responses.append(text_Message(number, "❌ Formato: *vincular tomas [medicamento] HH:MM [HH:MM]*"))
+
+    # === Ver agenda de retiros ===
+    elif text in ("mis retiros", "ver retiros"):
+        rows = pickup_list(number)
+        if not rows:
+            list_responses.append(text_Message(number, "📭 No tienes retiros programados. Usa: *programar retiro ...* o *programar ciclo ...*"))
+        else:
+            lines = []
+            for drug, date_iso, hour, freq, status in rows:
+                extra = f" (cada {freq} días)" if freq else ""
+                lines.append(f"• {drug} – {date_iso} {hour}{extra} – {status}")
+            body = "📋 *Tus retiros:*\n" + "\n".join(lines)
+            list_responses.append(text_Message(number, body))
 
     # 7) Agradecimientos y despedidas
     elif any(w in text for w in ["gracias", "muchas gracias"]):
@@ -2244,6 +2770,58 @@ def _reminder_scheduler_loop():
                                 r["last"] = now
                             except Exception as e:
                                 print(f"[reminder-thread] error al enviar: {e}")
+            
+            # === 3) Recordatorios de RETIRO (DB) ===
+            try:
+                now_hhmm = now  # ya calculado arriba
+                today_date = _safe_today_tz()
+                day_str = today_date.isoformat()
+                
+                with db_conn() as cx:
+                    # a) 3 días antes
+                    cur = cx.execute("""
+                        SELECT number, drug, date, hour FROM pickups
+                        WHERE status='pending'
+                    """)
+                    for number, drug, date_iso, hour in cur.fetchall():
+                        from datetime import datetime as _dt, timedelta as _td
+                        dd = _dt.fromisoformat(date_iso).date()
+                        if (dd - today_date).days == 3 and now_hhmm == hour:
+                            enviar_Mensaje_whatsapp(text_Message(
+                                number,
+                                f"📢 En 3 días te corresponde retirar: *{drug}*. ¿Quieres que te recuerde el mismo día a las {hour}?"
+                            ))
+                    
+                    # b) Día del retiro a la hora
+                    cur2 = cx.execute("""
+                        SELECT number, drug, date, hour FROM pickups
+                        WHERE status='pending' AND date=?
+                    """, (day_str,))
+                    for number, drug, date_iso, hour in cur2.fetchall():
+                        if now_hhmm == hour:
+                            enviar_Mensaje_whatsapp(text_Message(
+                                number,
+                                f"🚨 *Hoy corresponde retirar* *{drug}*.\n"
+                                "Responde: *retire {drug} si* o *retire {drug} no*."
+                            ))
+                    
+                    # c) Marcar "missed" a los 7 días (y avisar)
+                    cur3 = cx.execute("""
+                        SELECT id, number, drug, date FROM pickups
+                        WHERE status='pending'
+                    """)
+                    for pid, number, drug, date_iso in cur3.fetchall():
+                        from datetime import datetime as _dt, timedelta as _td
+                        dd = _dt.fromisoformat(date_iso).date()
+                        if (today_date - dd).days == 7:
+                            cx.execute("UPDATE pickups SET status='missed' WHERE id=?", (pid,))
+                            enviar_Mensaje_whatsapp(text_Message(
+                                number,
+                                f"⚠️ No registras el retiro de *{drug}*. ¿Reprogramo una nueva fecha?"
+                            ))
+            except Exception as e:
+                print("[scheduler-pickups] error:", e)
+                
         except Exception as e:
             print(f"[reminder-thread] excepción: {e}")
         
