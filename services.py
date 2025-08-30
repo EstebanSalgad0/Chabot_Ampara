@@ -98,8 +98,9 @@ route_sessions = {}  # { number: {"step": "...", "doc_type": "", "ges": "", "eda
 # ==================== GUÍA DE RUTA: HELPERS ====================
 def start_route_flow(number, messageId):
     body = (
-        "🏥 Soy MedicAI. Puedo guiarte con tu documentación/derivación.\n"
-        "¿Qué recibiste?"
+        "🏥 *¡Bienvenido a la Guía de Ruta Médica!*\n\n"
+        "📋 Te ayudo a entender y gestionar tus documentos médicos paso a paso.\n\n"
+        "¿Qué tipo de documento recibiste de tu médico o profesional de la salud?"
     )
     footer = "Guía de Ruta"
     options = [
@@ -122,44 +123,105 @@ def ask_ges(number, messageId):
 def interconsulta_instructions(ges_option):
     if ges_option == "Sí, es GES":
         return (
-            "✅ *Interconsulta GES*\n"
-            "• Ingresa la interconsulta en SOME del CESFAM y pide número de seguimiento.\n"
-            "• Te contactarán para coordinar especialidad/exámenes dentro de plazos GES.\n"
+            "✅ *INTERCONSULTA GES (Garantías Explícitas en Salud)*\n\n"
+            "📋 **¿Qué es?** Una derivación a especialista con cobertura garantizada por ley.\n\n"
+            "📝 **Pasos a seguir:**\n"
+            "1️⃣ Lleva tu interconsulta al *SOME del CESFAM* donde estás inscrito\n"
+            "2️⃣ Solicita el *número de seguimiento GES* (muy importante)\n"
+            "3️⃣ Te contactarán dentro de los plazos GES para coordinar:\n"
+            "   • Cita con especialista\n"
+            "   • Exámenes previos si se requieren\n"
+            "   • Tratamiento garantizado\n\n"
+            "⏰ **Plazos GES:** Varían según patología (desde 24h hasta 90 días)\n\n"
+            "💡 **Tip:** Guarda tu número de seguimiento para consultar estado.\n\n"
             "¿Quieres configurar un recordatorio de *revisión de estado GES*?"
         )
     else:
         return (
-            "ℹ️ *Interconsulta NO GES o no confirmada*\n"
-            "• Lleva la interconsulta a SOME del CESFAM y confirma que quedó ingresada.\n"
-            "• Pregunta si requieren exámenes previos y un número de contacto.\n"
+            "ℹ️ *INTERCONSULTA NO GES o sin confirmar*\n\n"
+            "📋 **¿Qué es?** Derivación a especialista sin cobertura GES específica.\n\n"
+            "📝 **Pasos a seguir:**\n"
+            "1️⃣ Lleva la interconsulta al *SOME del CESFAM* donde estás inscrito\n"
+            "2️⃣ Confirma que quede *correctamente ingresada* en el sistema\n"
+            "3️⃣ Pregunta si necesitas *exámenes previos* antes de la cita\n"
+            "4️⃣ Solicita un *número de contacto* para hacer seguimiento\n"
+            "5️⃣ Pregunta por los *tiempos de espera estimados*\n\n"
+            "⚠️ **Importante:** Los tiempos pueden ser variables (no están garantizados como en GES)\n\n"
+            "💡 **Tip:** Si tu condición empeora mientras esperas, consulta nuevamente.\n\n"
             "¿Te indico en qué sede del CESFAM hacer el trámite?"
         )
 
 def exams_steps():
     return (
-        "🧪 *Orden de exámenes / procedimiento*\n"
-        "• Agenda hora en SOME/Laboratorio.\n"
-        "• Verifica si requiere *ayuno* (ej. glicemia/perfil lipídico).\n"
-        "• Presenta cédula y la orden del profesional.\n"
+        "🧪 *ORDEN DE EXÁMENES / PROCEDIMIENTOS*\n\n"
+        "📋 **¿Qué es?** Solicitud médica para realizar estudios diagnósticos.\n\n"
+        "📝 **Pasos a seguir:**\n"
+        "1️⃣ *Agenda tu hora:*\n"
+        "   • En SOME del CESFAM (exámenes básicos)\n"
+        "   • En laboratorio externo (si así se indica)\n"
+        "   • Llamando al número que aparece en la orden\n\n"
+        "2️⃣ *Antes de ir, verifica:*\n"
+        "   • Si requiere *ayuno* (8-12 horas sin comer)\n"
+        "   • Horarios de atención del laboratorio\n"
+        "   • Si necesitas suspender algún medicamento\n\n"
+        "3️⃣ *El día del examen lleva:*\n"
+        "   • Cédula de identidad\n"
+        "   • Orden médica original\n"
+        "   • Credencial de salud (si tienes)\n\n"
+        "4️⃣ *Después del examen:*\n"
+        "   • Pregunta cuándo estarán los resultados\n"
+        "   • Retira los resultados en la fecha indicada\n"
+        "   • Agenda control con tu médico tratante\n\n"
+        "💡 **Tip:** Algunos exámenes como glicemia, colesterol, triglicéridos requieren ayuno.\n\n"
         "¿Quieres que revisemos si tu examen requiere *ayuno*?"
     )
 
 def urgent_referral_steps():
     return (
-        "🚨 *Derivación urgente*\n"
-        "• Debes acudir *de inmediato* al servicio indicado (SAPU/SAR o Urgencia hospitalaria).\n"
-        "• Si empeoras en el trayecto, llama al 131 (SAMU).\n"
+        "🚨 *DERIVACIÓN URGENTE*\n\n"
+        "📋 **¿Qué es?** Referencia médica para atención inmediata en servicios de urgencia.\n\n"
+        "⚠️ **ACCIÓN INMEDIATA REQUERIDA:**\n"
+        "1️⃣ *Dirígete de inmediato* al servicio indicado:\n"
+        "   • SAPU (Servicio de Atención Primaria de Urgencia)\n"
+        "   • SAR (Servicio de Alta Resolución)\n"
+        "   • Urgencia hospitalaria\n\n"
+        "2️⃣ *Si tu estado empeora en el trayecto:*\n"
+        "   • Llama al 131 (SAMU) inmediatamente\n"
+        "   • No esperes, busca el centro de salud más cercano\n\n"
+        "3️⃣ *Lleva contigo:*\n"
+        "   • Cédula de identidad\n"
+        "   • Derivación urgente (papel que te dieron)\n"
+        "   • Medicamentos que tomas habitualmente\n"
+        "   • Exámenes recientes (si los tienes)\n\n"
+        "📞 **Números de emergencia:**\n"
+        "   • SAMU: 131\n"
+        "   • Bomberos: 132\n"
+        "   • Carabineros: 133\n\n"
+        "💡 **Importante:** En urgencias médicas reales, NO esperes respuesta del chatbot.\n\n"
         "¿Te indico el SAPU más cercano si me das tu comuna?"
     )
 
 def req_docs_steps():
     return (
-        "🧾 *Checklist de requisitos frecuentes*\n"
-        "• Orden/interconsulta\n"
-        "• Cédula de identidad\n"
-        "• Exámenes previos (si los hay)\n"
-        "• A veces: cartola del Registro Social de Hogares\n"
-        "¿Quieres que lo guarde y te envíe *recordatorios*?"
+        "🧾 *CHECKLIST DE DOCUMENTOS Y REQUISITOS*\n\n"
+        "📋 **Documentos básicos que siempre debes llevar:**\n\n"
+        "🆔 **Obligatorios:**\n"
+        "   • Cédula de identidad vigente\n"
+        "   • Orden/interconsulta/receta original\n"
+        "   • Credencial del sistema de salud (FONASA/ISAPRE)\n\n"
+        "📄 **Documentos adicionales según el caso:**\n"
+        "   • Exámenes previos relacionados (últimos 6 meses)\n"
+        "   • Cartola del Registro Social de Hogares (para algunos trámites)\n"
+        "   • Lista de medicamentos actuales\n"
+        "   • Informes médicos anteriores\n"
+        "   • Autorización del tutor (menores de edad)\n\n"
+        "💡 **Tips importantes:**\n"
+        "   • Siempre lleva originales Y fotocopias\n"
+        "   • Si eres adulto mayor, puedes ir acompañado\n"
+        "   • Anota preguntas que quieras hacer al profesional\n"
+        "   • Llega 15 minutos antes de tu hora\n\n"
+        "📱 **Recordatorio:** Puedes tomar foto de tus documentos como respaldo.\n\n"
+        "¿Quieres que lo guarde y te envíe *recordatorios* personalizados?"
     )
 # ==================== FIN HELPERS GUÍA DE RUTA ====================
 
@@ -1565,9 +1627,8 @@ def administrar_chatbot(text, number, messageId, name):
         # filas del listado "Más opciones"
         "menu_mas_row_1": "orientacion de sintomas",
         "menu_mas_row_2": "guia de ruta",
-        "menu_mas_row_3": "explicador de documentos",
-        "menu_mas_row_4": "stock de medicamentos",
-        "menu_mas_row_5": "gestionar recordatorios",
+        "menu_mas_row_3": "stock de medicamentos",
+        "menu_mas_row_4": "gestionar recordatorios",
 
         # Especialidades – página 1
         "cita_especialidad_row_1": "medicina general",
@@ -1885,16 +1946,16 @@ def administrar_chatbot(text, number, messageId, name):
         return
 
     datetime_mapping = {
-    "cita_datetime_row_1": "2025-04-18 10:00 AM",
-    "cita_datetime_row_2": "2025-04-18 11:30 AM",
-    "cita_datetime_row_3": "2025-04-18 02:00 PM",
-    "cita_datetime_row_4": "2025-04-19 09:00 AM",
-    "cita_datetime_row_5": "2025-04-19 03:00 PM",
-    "cita_datetime_row_6": "2025-04-20 10:00 AM",
-    "cita_datetime_row_7": "2025-04-20 01:00 PM",
-    "cita_datetime_row_8": "2025-04-21 09:30 AM",
-    "cita_datetime_row_9": "2025-04-21 11:00 AM",
-    "cita_datetime_row_10":"2025-04-21 02:30 PM",
+    "cita_datetime_row_1": "2025-09-02 10:00 AM",
+    "cita_datetime_row_2": "2025-09-02 11:30 AM",
+    "cita_datetime_row_3": "2025-09-02 02:00 PM",
+    "cita_datetime_row_4": "2025-09-03 09:00 AM",
+    "cita_datetime_row_5": "2025-09-03 03:00 PM",
+    "cita_datetime_row_6": "2025-09-04 10:00 AM",
+    "cita_datetime_row_7": "2025-09-04 01:00 PM",
+    "cita_datetime_row_8": "2025-09-05 09:30 AM",
+    "cita_datetime_row_9": "2025-09-05 11:00 AM",
+    "cita_datetime_row_10":"2025-09-05 02:30 PM",
     }
 
     # 4) flujo de orientación activo (solo orientación de síntomas)
@@ -1983,8 +2044,7 @@ def administrar_chatbot(text, number, messageId, name):
         opciones_mas = [
             "🩺 Orientación de Síntomas",
             "🧾 Guía de Ruta / Derivaciones",
-            "📄 Explicador de Documentos",
-            "💊 Stock de Medicamentos",
+            " Stock de Medicamentos",
             "⏰ Gestionar Recordatorios"
         ]
         list_responses.append(
@@ -2407,17 +2467,6 @@ def administrar_chatbot(text, number, messageId, name):
         return
 
     # Nuevas opciones del menú "Más opciones"
-    elif text == "explicador de documentos":
-        list_responses.append(text_Message(
-            number,
-            "📄 *Explicador de Documentos*\n"
-            "Puedo ayudarte a entender documentos médicos como:\n"
-            "• Resultados de exámenes\n"
-            "• Informes médicos\n"
-            "• Recetas médicas\n\n"
-            "Envía una foto o descripción del documento que necesitas entender."
-        ))
-
     elif text == "stock de medicamentos":
         stock_sessions[number] = {"step": "activate"}
         body = ("💊 *Gestión de Retiro de Medicamentos*\n"
