@@ -1718,247 +1718,23 @@ def administrar_chatbot(text, number, messageId, name):
     if text in ui_mapping:
         text = ui_mapping[text]
 
-    # -----------------------------------------------------------
-    # 4.bis) MICRO: Guía de Ruta / Derivaciones
-    # -----------------------------------------------------------
-    # --- Disparadores por keyword (texto) de Guía de Ruta ---
-    if ("guia de ruta" in text or "derivacion" in text or "ruta de atencion" in text):
-        list_responses.append(start_route_flow(number, messageId))
-
-    # Si el usuario ya está dentro del flujo
-    elif number in route_sessions:
-        st = route_sessions[number]
-        step = st.get("step")
-
-        # Paso: elegir tipo
-        if step == "choose_type":
-            if text == "interconsulta":
-                st["doc_type"] = "interconsulta"
-                list_responses.append(text_Message(number, "Perfecto. Recibiste una *interconsulta médica*."))
-                list_responses.append(ask_ges(number, messageId))
-
-            elif text == "examenes":
-                st["doc_type"] = "examenes"
-                st["step"] = "exams"
-                list_responses.append(text_Message(number, exams_steps()))
-                list_responses.append(
-                    buttonReply_Message(
-                        number,
-                        ["Sí, ver ayuno", "No, gracias"],
-                        "¿Tu examen requiere ayuno?",
-                        "Orden de exámenes",
-                        "route_exams_fast",
-                        messageId
-                    )
-                )
-
-            elif text == "receta":
-                st["doc_type"] = "receta"
-                st["step"] = "rx"
-                list_responses.append(text_Message(
-                    number,
-                    "💊 Detecté *receta/indicaciones*. ¿Configuro recordatorios de tomas?"
-                ))
-                list_responses.append(
-                    buttonReply_Message(
-                        number,
-                        ["Sí, configurar", "No, gracias"],
-                        "Adherencia terapéutica",
-                        "Receta",
-                        "route_rx",
-                        messageId
-                    )
-                )
-
-            elif text == "derivacion_urgente":
-                st["doc_type"] = "derivacion_urgente"
-                st["step"] = "urgent"
-                list_responses.append(text_Message(number, urgent_referral_steps()))
-                list_responses.append(
-                    buttonReply_Message(
-                        number,
-                        ["Sí, indicar SAPU", "No por ahora"],
-                        "Derivación urgente",
-                        "Guía de Ruta",
-                        "route_urgent",
-                        messageId
-                    )
-                )
-
-            else:
-                st["doc_type"] = "no_seguro"
-                st["step"] = "requirements"
-                list_responses.append(text_Message(number, "No te preocupes. Te dejo *requisitos y pasos* útiles:"))
-                list_responses.append(text_Message(number, req_docs_steps()))
-                list_responses.append(
-                    buttonReply_Message(
-                        number,
-                        ["Sí, guardar", "No, gracias"],
-                        "Guardar / Recordatorios",
-                        "Guía de Ruta",
-                        "route_save",
-                        messageId
-                    )
-                )
-
-        # Paso: pregunta GES
-        elif step == "ask_ges":
-            if text == "ges_si":
-                st["ges"] = "sí"
-                list_responses.append(text_Message(number, interconsulta_instructions("Sí, es GES")))
-                list_responses.append(
-                    buttonReply_Message(
-                        number,
-                        ["Sí, recordarme GES", "No, gracias"],
-                        "Recordatorios",
-                        "Interconsulta GES",
-                        "route_ges_reminder",
-                        messageId
-                    )
-                )
-                st["step"] = "requirements"
-
-            elif text == "ges_no" or text == "ges_ns":
-                st["ges"] = "no/nd"
-                list_responses.append(text_Message(number, interconsulta_instructions("No")))
-                list_responses.append(
-                    buttonReply_Message(
-                        number,
-                        ["Sí, indicar sede", "No, gracias"],
-                        "SOME CESFAM",
-                        "Interconsulta",
-                        "route_some_site",
-                        messageId
-                    )
-                )
-                st["step"] = "requirements"
-
-            else:
-                # Respuesta libre: tratamos como no sabe
-                st["ges"] = "nd"
-                list_responses.append(text_Message(number, interconsulta_instructions("No")))
-                list_responses.append(
-                    buttonReply_Message(
-                        number,
-                        ["Sí, indicar sede", "No, gracias"],
-                        "SOME CESFAM",
-                        "Interconsulta",
-                        "route_some_site",
-                        messageId
-                    )
-                )
-                st["step"] = "requirements"
-
-        # Paso: exámenes -> ayuno sí/no
-        elif step == "exams":
-            if text == "ayuno_si":
-                list_responses.append(text_Message(
-                    number,
-                    "Tip general: muchos perfiles requieren *8–12 h* de ayuno (verifica en tu orden o SOME)."
-                ))
-            else:
-                list_responses.append(text_Message(
-                    number,
-                    "Ok. Si dudas, confírmalo al agendar en SOME/laboratorio."
-                ))
-            st["step"] = "requirements"
-            list_responses.append(text_Message(number, req_docs_steps()))
-            list_responses.append(
-                buttonReply_Message(
-                    number,
-                    ["Sí, guardar", "No, gracias"],
-                    "Guardar / Recordatorios",
-                    "Guía de Ruta",
-                    "route_save",
-                    messageId
-                )
-            )
-
-        # Paso: receta -> puente a adherencia
-        elif step == "rx":
-            if text == "rx_recordatorios_si":
-                list_responses.append(text_Message(
-                    number,
-                    "Perfecto. Para configurarlos escribe: *recordatorio de medicamento*."
-                ))
-            else:
-                list_responses.append(text_Message(
-                    number,
-                    "Entendido. Si más tarde quieres recordatorios, escribe: *recordatorio de medicamento*."
-                ))
-            st["step"] = "close"
-            list_responses.append(
-                buttonReply_Message(
-                    number,
-                    ["Sí, guardar", "No, gracias"],
-                    "Guardar / Recordatorios",
-                    "Guía de Ruta",
-                    "route_close",
-                    messageId
-                )
-            )
-
-        # Paso: urgente
-        elif step == "urgent":
-            if text == "urgent_sapu_si":
-                list_responses.append(text_Message(
-                    number,
-                    "Envíame tu *comuna o dirección aproximada* y te indico el SAPU más cercano."
-                ))
-            else:
-                list_responses.append(text_Message(
-                    number,
-                    "Recuerda: en una urgencia, acude *de inmediato* o llama al 131."
-                ))
-            st["step"] = "requirements"
-            list_responses.append(text_Message(number, req_docs_steps()))
-            list_responses.append(
-                buttonReply_Message(
-                    number,
-                    ["Sí, guardar", "No, gracias"],
-                    "Guardar / Recordatorios",
-                    "Guía de Ruta",
-                    "route_save",
-                    messageId
-                )
-            )
-
-        # Paso: guardar/cerrar
-        elif step in ("requirements", "close"):
-            if text in ("guardar_si", "cerrar_guardar_si", "ges_reminder_si", "sede_si"):
-                list_responses.append(text_Message(
-                    number,
-                    "✅ Guardado. Puedo recordarte revisar SOME o el estado de tu interconsulta/derivación cuando lo indiques."
-                ))
-            else:
-                list_responses.append(text_Message(
-                    number,
-                    "Listo. Si necesitas volver a la *Guía de Ruta*, escribe: *guía de ruta*."
-                ))
-            route_sessions.pop(number, None)
-
-        # 👉 ENVÍA Y SALE
-        for i, payload in enumerate(list_responses):
-            if payload and payload.strip():
-                enviar_Mensaje_whatsapp(payload)
-            if i < len(list_responses) - 1:
-                time.sleep(1)
-        return
-
+    # Mapeo de fechas y horas para citas
     datetime_mapping = {
-    "cita_datetime_row_1": "2025-09-02 10:00 AM",
-    "cita_datetime_row_2": "2025-09-02 11:30 AM",
-    "cita_datetime_row_3": "2025-09-02 02:00 PM",
-    "cita_datetime_row_4": "2025-09-03 09:00 AM",
-    "cita_datetime_row_5": "2025-09-03 03:00 PM",
-    "cita_datetime_row_6": "2025-09-04 10:00 AM",
-    "cita_datetime_row_7": "2025-09-04 01:00 PM",
-    "cita_datetime_row_8": "2025-09-05 09:30 AM",
-    "cita_datetime_row_9": "2025-09-05 11:00 AM",
-    "cita_datetime_row_10":"2025-09-05 02:30 PM",
+        "cita_datetime_row_1": "2025-09-02 10:00 AM",
+        "cita_datetime_row_2": "2025-09-02 11:30 AM",
+        "cita_datetime_row_3": "2025-09-02 02:00 PM",
+        "cita_datetime_row_4": "2025-09-03 09:00 AM",
+        "cita_datetime_row_5": "2025-09-03 03:00 PM",
+        "cita_datetime_row_6": "2025-09-04 10:00 AM",
+        "cita_datetime_row_7": "2025-09-04 01:00 PM",
+        "cita_datetime_row_8": "2025-09-05 09:30 AM",
+        "cita_datetime_row_9": "2025-09-05 11:00 AM",
+        "cita_datetime_row_10":"2025-09-05 02:30 PM",
     }
 
-    # 4) flujo de orientación activo (solo orientación de síntomas)
+    # -----------------------------------------------------------
+    # Flujo de orientación activo (solo orientación de síntomas)
+    # -----------------------------------------------------------
     if number in session_states and 'categoria' in session_states[number]:
         state = session_states[number]
         hdr = f"orientacion_{state['categoria']}_{state['paso']}"
@@ -2003,11 +1779,21 @@ def administrar_chatbot(text, number, messageId, name):
     # 1) Emergencias
     if any(w in text for w in ["ayuda urgente", "urgente", "accidente", "samu", "131"]):
         body = (
-            "🚨 *Si estás en una emergencia médica, llama de inmediato:* 🚨\n"
-            "• SAMU: 131\n"
-            "• Bomberos: 132\n"
-            "• Carabineros: 133\n\n"
-            "*No esperes respuesta del chatbot.*"
+            "🚨 *EMERGENCIA MÉDICA DETECTADA* 🚨\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚠️ *LLAMA INMEDIATAMENTE* ⚠️\n\n"
+            
+            "� *NÚMEROS DE EMERGENCIA:*\n"
+            "🚑 SAMU: *131*\n"
+            "🔥 Bomberos: *132*\n"
+            "👮 Carabineros: *133*\n\n"
+            
+            "🔴 *IMPORTANTE:*\n"
+            "• NO esperes respuesta del chatbot\n"
+            "• Actúa de inmediato\n"
+            "• Si es posible, busca ayuda cercana\n\n"
+            
+            "💙 *Tu seguridad es lo primero*"
         )
         list_responses.append(text_Message(number, body))
         list_responses.append(replyReaction_Message(number, messageId, "🚨"))
@@ -2015,20 +1801,26 @@ def administrar_chatbot(text, number, messageId, name):
     # Saludo y menú principal
     elif any(w in text for w in ["hola", "buenas", "saludos"]):
         body = (
-            f"👋 ¡Hola {name}! Soy *MedicAI*, tu asistente virtual.\n\n"
-            "¿En qué puedo ayudarte?\n"
-            "1️⃣ Agendar Cita Médica\n"
-            "2️⃣ Recordatorio de Medicamento\n"
-            "3️⃣ Más opciones\n\n"
+            f"🌟 ¡Hola {name}! Soy *MedicAI* 🩺\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💙 *Tu asistente virtual de salud* 💙\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             
-            "💡 *Tip:* Escribe *comandos* para ver todos los comandos disponibles.\n"
-            "🤖 *¡Escribe cualquier comando para empezar!*"
+            "✨ *¿En qué puedo ayudarte hoy?*\n\n"
+            
+            "🔹 *Servicios principales:*\n"
+            "🗓️ Agendar Cita Médica\n"
+            "💊 Recordatorio de Medicamentos\n"
+            "➕ Más opciones de ayuda\n\n"
+            
+            "💡 *¿Necesitas ayuda?* Escribe *comandos*\n"
+            "🚀 *¡Selecciona una opción para comenzar!*"
         )
-        footer = "MedicAI"
+        footer = "MedicAI • Tu asistente de salud"
         opts = [
-            "🗓️ Cita Médica",
-            "💊 Recordar Medic",
-            "➕ Más opciones"
+            "🗓️ Agendar Cita",
+            "💊 Recordatorios",
+            "➕ Más Opciones"
         ]
         list_responses.append(
             buttonReply_Message(number, opts, body, footer, "menu_principal", messageId)
@@ -2039,12 +1831,23 @@ def administrar_chatbot(text, number, messageId, name):
 
     # Menú "Más opciones"
     elif text == "menu_mas":
-        body = "Más opciones de ayuda:"
-        footer = "MedicAI"
+        body = (
+            "✨ *Más Opciones de Ayuda* ✨\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔹 *Servicios adicionales disponibles:*\n\n"
+            
+            "🩺 Orientación médica personalizada\n"
+            "📋 Guía para trámites de salud\n"
+            "💊 Gestión completa de medicamentos\n"
+            "⏰ Control de recordatorios\n\n"
+            
+            "💡 *Selecciona la opción que necesites:*"
+        )
+        footer = "MedicAI • Servicios Extra"
         opciones_mas = [
             "🩺 Orientación de Síntomas",
-            "🧾 Guía de Ruta / Derivaciones",
-            " Stock de Medicamentos",
+            "📋 Guía de Ruta / Derivaciones",
+            "💊 Stock de Medicamentos",
             "⏰ Gestionar Recordatorios"
         ]
         list_responses.append(
@@ -2062,9 +1865,20 @@ def administrar_chatbot(text, number, messageId, name):
      # 3) Flujo: Agendar Citas
      # -----------------------------------------------------------
     elif "agendar cita" in text or "cita medica" in text:
-         appointment_sessions[number] = {}                       # ← MOD: inicializo estado de cita
-         body = "🗓️ ¡Perfecto! Selecciona el tipo de atención que necesitas:"
-         footer = "Agendamiento de Citas"
+         appointment_sessions[number] = {}
+         body = (
+             "🗓️ *¡Excelente decisión!* 🗓️\n"
+             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+             "✨ *Agendamiento de Citas Médicas* ✨\n\n"
+             
+             "👩‍⚕️ *Selecciona el tipo de atención:*\n"
+             "� Contamos con profesionales especializados\n"
+             "🔹 Horarios flexibles disponibles\n"
+             "🔹 Atención de calidad garantizada\n\n"
+             
+             "💡 *¿Qué especialidad necesitas?*"
+         )
+         footer = "Agendamiento • MedicAI"
          opts = [
              "🩺 Medicina General",
              "👶 Pediatría",
@@ -2165,7 +1979,7 @@ def administrar_chatbot(text, number, messageId, name):
 
      # 3.6) Confirmación final
     elif text in ["sede talca", "sede curicó", "sede linares"]:
-         appointment_sessions[number]['sede'] = text             # ← MOD: guardo sede
+         appointment_sessions[number]['sede'] = text
          esp  = appointment_sessions[number]['especialidad'].capitalize()
          dt   = appointment_sessions[number].get('datetime', 'día y hora')
          sede = appointment_sessions[number]['sede'].capitalize()
@@ -2176,21 +1990,47 @@ def administrar_chatbot(text, number, messageId, name):
          else:
              horario = dt
          body = (
-             f"¡Listo! Tu cita ha sido agendada para el *{horario}*, "
-             f"en *{esp}*, en la sede *{sede}*.\n\n"
-             "¿Deseas que te envíe un recordatorio el día anterior?"
+             f"🎉 *¡Cita Agendada Exitosamente!* 🎉\n"
+             f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+             f"✅ *Confirmación de Agendamiento* ✅\n\n"
+             
+             f"📅 *Fecha y Hora:* {horario}\n"
+             f"👩‍⚕️ *Especialidad:* {esp}\n"
+             f"🏥 *Sede:* {sede}\n\n"
+             
+             f"📲 *¿Deseas recibir un recordatorio?*\n"
+             f"🔹 Te enviaremos una notificación\n"
+             f"🔹 El día anterior a tu cita\n"
+             f"🔹 Para que no se te olvide\n\n"
+             
+             f"💙 *¡Nos vemos pronto!*"
          )
-         footer = "Agendamiento – Confirmación Final"
-         opts   = ["Sí", "No"]
+         footer = "Confirmación • MedicAI"
+         opts   = ["✅ Sí, recordarme", "❌ No, gracias"]
          list_responses.append(
              buttonReply_Message(number, opts, body, footer, "cita_confirmacion", messageId)
          )
 
      # 3.7) Respuesta al recordatorio y cierre
     elif text.startswith("cita_confirmacion"):
-         body = "¡Todo listo! Gracias por confiar en MedicAI 🩺✨"
+         body = (
+             "🌟 *¡Proceso Completado con Éxito!* 🌟\n"
+             "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+             "💙 *Gracias por confiar en MedicAI* 💙\n\n"
+             
+             "✅ *Tu cita está confirmada y guardada*\n"
+             "🩺 *Nuestro equipo te espera*\n"
+             "📱 *Mantén tu teléfono activo para recordatorios*\n\n"
+             
+             "💡 *Recuerda:*\n"
+             "🔹 Llegar 15 minutos antes\n"
+             "🔹 Traer tu cédula de identidad\n"
+             "🔹 Cualquier examen previo relacionado\n\n"
+             
+             "🚀 *¡Que tengas un excelente día!* ✨"
+         )
          list_responses.append(text_Message(number, body))
-         appointment_sessions.pop(number, None)                  # ← MOD: limpio estado de cita
+         appointment_sessions.pop(number, None)
 
 
      # -----------------------------------------------------------
@@ -2204,8 +2044,20 @@ def administrar_chatbot(text, number, messageId, name):
         session_states[number]   = {"flow": "med", "step": "ask_name"}
 
         body = (
-            "🌿 ¡Vamos a ayudarte a mantener tu tratamiento al día! 🕒\n"
-            "¿Qué medicamento necesitas que te recuerde tomar?"
+            "💊 *¡Cuidemos tu salud juntos!* 💊\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⏰ *Sistema de Recordatorios* ⏰\n\n"
+            
+            "🌟 *¿Sabías que?*\n"
+            "• El 90% de los tratamientos exitosos\n"
+            "  dependen de la adherencia terapéutica\n\n"
+            
+            "💡 *Configuremos tu recordatorio:*\n"
+            "🔹 Notificaciones automáticas\n"
+            "🔹 Horarios personalizados\n"
+            "🔹 Seguimiento de tu progreso\n\n"
+            
+            "📝 *¿Cuál es el nombre del medicamento?*"
         )
         list_responses.append(text_Message(number, body))
 
@@ -2315,42 +2167,44 @@ def administrar_chatbot(text, number, messageId, name):
 
     elif text in ["comandos", "comando", "ayuda comandos", "ver comandos"]:
         body = (
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "💡 *COMANDOS DISPONIBLES*\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "📚 *GUÍA COMPLETA DE COMANDOS* 📚\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "✨ *MedicAI - Tu Asistente de Salud* ✨\n\n"
             
-            "💊 *MEDICAMENTOS & ADHERENCIA*\n"
-            "• *recordatorio de medicamento* - Crear recordatorio\n"
-            "• *mis recordatorios* - Ver recordatorios activos\n"
-            "• *eliminar recordatorio [N°]* - Eliminar recordatorio\n"
-            "• *gestionar recordatorios* - Panel completo\n"
-            "• *vincular tomas [med] HH:MM* - Vincular horarios\n\n"
+            "💊 *MEDICAMENTOS & RECORDATORIOS*\n"
+            "• *recordatorio de medicamento*\n"
+            "• *mis recordatorios*\n"
+            "• *eliminar recordatorio [N°]*\n"
+            "• *gestionar recordatorios*\n"
+            "• *vincular tomas [med] HH:MM*\n\n"
             
-            "🏥 *RETIROS & STOCK*\n"
-            "• *stock de medicamentos* - Gestión de retiros\n"
-            "• *mis retiros* - Ver retiros programados\n"
-            "• *retire [medicamento] si|no* - Confirmar retiro\n"
-            "• *programar retiro [med] [fecha] [hora]* - Agendar\n"
-            "• *programar ciclo [med] [fecha] [hora] cada [días]* - Ciclos\n"
-            "• *stock ver [medicamento]* - Consultar disponibilidad\n"
-            "• *stock agregar [med] [cantidad]* - Incrementar stock\n"
-            "• *stock bajar [med] [cantidad]* - Decrementar stock\n\n"
+            "🏥 *STOCK & RETIROS*\n"
+            "• *stock de medicamentos*\n"
+            "• *mis retiros* / *ver retiros*\n"
+            "• *retire [medicamento] si|no*\n"
+            "• *programar retiro [med] [fecha] [hora]*\n"
+            "• *programar ciclo [med] [fecha] [hora] cada [días]*\n"
+            "• *stock agregar [med] [cantidad]*\n"
+            "• *stock bajar [med] [cantidad]*\n"
+            "• *stock ver [medicamento]*\n\n"
             
-            "🗓️ *CITAS & NAVEGACIÓN*\n"
-            "• *agendar cita* - Programar atención médica\n"
-            "• *guía de ruta* - Derivaciones/interconsultas\n"
-            "• *orientación de síntomas* - Diagnóstico orientativo\n\n"
+            "🗓️ *CITAS MÉDICAS*\n"
+            "• *agendar cita* / *cita medica*\n\n"
             
-            "🔧 *HERRAMIENTAS*\n"
-            "• *debug hora* - Ver hora del servidor\n"
-            "• *test en 1 min* - Probar recordatorio inmediato\n\n"
+            "🩺 *ORIENTACIÓN & GUÍAS*\n"
+            "• *orientación de síntomas*\n"
+            "• *guía de ruta* / *derivacion*\n\n"
             
             "🚨 *EMERGENCIAS*\n"
-            "• *ayuda urgente* - Números de emergencia\n"
-            "• *urgente* - Contactos SAMU/Bomberos\n\n"
+            "• *ayuda urgente* / *urgente*\n"
+            "• *samu* / *131*\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🤖 *¡Copia y pega cualquier comando para usarlo!*"
+            "🔧 *UTILIDADES*\n"
+            "• *hola* - Menú principal\n"
+            "• *gracias* - Agradecimiento\n"
+            "• *adiós* / *chao* - Despedida\n\n"
+            
+            "⚡ *¡Escribe cualquier comando para empezar!*"
         )
         list_responses.append(text_Message(number, body))
 
@@ -2403,19 +2257,33 @@ def administrar_chatbot(text, number, messageId, name):
             
     # 5) Inicio de orientación de síntomas
     elif "orientacion de sintomas" in text:
-        body = "Selecciona categoría de Enfermedades:"
-        footer = "Orient. Síntomas"
+        body = (
+            "🩺 *Orientación Médica Inteligente* 🩺\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔍 *Análisis de Síntomas* 🔍\n\n"
+            
+            "⚠️ *Importante:*\n"
+            "• Esta es una orientación informativa\n"
+            "• NO reemplaza la consulta médica\n"
+            "• En emergencias, contacta al 131\n\n"
+            
+            "📋 *Selecciona la categoría que mejor\n"
+            "describe tus síntomas:*\n\n"
+            
+            "💡 *Te ayudaré a entender mejor tu situación*"
+        )
+        footer = "Sistema de Orientación • MedicAI"
         opts = [
-            "Respiratorias 🌬",
-            "Bucales 🦷",
-            "Infecciosas 🦠",
-            "Cardio ❤️",
-            "Metabólicas ⚖️",
-            "Neurológicas 🧠",
-            "Músculo 💪",
-            "Salud Mental 🧘",
-            "Dermatologicas 🩹",
-            "Ver más ➡️",
+            "🫁 Respiratorias",
+            "🦷 Bucales",
+            "🦠 Infecciosas",
+            "❤️ Cardiovasculares",
+            "⚖️ Metabólicas",
+            "🧠 Neurológicas",
+            "💪 Musculoesqueléticas",
+            "🧘 Salud Mental",
+            "🩹 Dermatológicas",
+            "➡️ Ver más categorías",
         ]
         enviar_Mensaje_whatsapp(
             listReply_Message(number, opts, body, footer, "orientacion_categorias", messageId)
@@ -2469,10 +2337,25 @@ def administrar_chatbot(text, number, messageId, name):
     # Nuevas opciones del menú "Más opciones"
     elif text == "stock de medicamentos":
         stock_sessions[number] = {"step": "activate"}
-        body = ("💊 *Gestión de Retiro de Medicamentos*\n"
-                "¿Tienes una *receta activa* que aún no has retirado?")
-        opts = ["Sí", "No lo sé", "No"]
-        list_responses.append(listReply_Message(number, opts, body, "Stock", "stock_activa", messageId))
+        body = (
+            "💊 *Gestión Inteligente de Medicamentos* 💊\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "📋 *Control de Retiros y Stock* 📋\n\n"
+            
+            "🔹 *Servicios disponibles:*\n"
+            "• Verificación de disponibilidad\n"
+            "• Programación de retiros\n"
+            "• Recordatorios automáticos\n"
+            "• Vinculación con adherencia\n\n"
+            
+            "📝 *Para empezar, necesito saber:*\n"
+            "¿Tienes una *receta médica activa*\n"
+            "que aún no has retirado?\n\n"
+            
+            "💡 *Selecciona tu situación:*"
+        )
+        opts = ["✅ Sí, tengo receta", "🤔 No estoy seguro/a", "❌ No tengo receta"]
+        list_responses.append(listReply_Message(number, opts, body, "Gestión de Medicamentos • MedicAI", "stock_activa", messageId))
 
     # 6.2) Secuencia del flujo de stock
     elif number in stock_sessions:
@@ -2754,6 +2637,232 @@ def administrar_chatbot(text, number, messageId, name):
         list_responses.append(text_Message(number, random.choice(despedidas)))
         list_responses.append(replyReaction_Message(number, messageId, "👋"))
 
+    # -----------------------------------------------------------
+    # Manejo del flujo de Guía de Ruta (ANTES del default)
+    # -----------------------------------------------------------
+    elif ("guia de ruta" in text or "derivacion" in text or "ruta de atencion" in text):
+        list_responses.append(start_route_flow(number, messageId))
+
+    # Si el usuario ya está dentro del flujo de ruta
+    elif number in route_sessions:
+        st = route_sessions[number]
+        step = st.get("step")
+
+        # Paso: elegir tipo
+        if step == "choose_type":
+            if text == "interconsulta":
+                st["doc_type"] = "interconsulta"
+                list_responses.append(text_Message(number, "Perfecto. Recibiste una *interconsulta médica*."))
+                list_responses.append(ask_ges(number, messageId))
+
+            elif text == "examenes":
+                st["doc_type"] = "examenes"
+                st["step"] = "exams"
+                list_responses.append(text_Message(number, exams_steps()))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, ver ayuno", "No, gracias"],
+                        "¿Tu examen requiere ayuno?",
+                        "Orden de exámenes",
+                        "route_exams_fast",
+                        messageId
+                    )
+                )
+
+            elif text == "receta":
+                st["doc_type"] = "receta"
+                st["step"] = "rx"
+                list_responses.append(text_Message(
+                    number,
+                    "💊 Detecté *receta/indicaciones*. ¿Configuro recordatorios de tomas?"
+                ))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, configurar", "No, gracias"],
+                        "Adherencia terapéutica",
+                        "Receta",
+                        "route_rx",
+                        messageId
+                    )
+                )
+
+            elif text == "derivacion_urgente":
+                st["doc_type"] = "derivacion_urgente"
+                st["step"] = "urgent"
+                list_responses.append(text_Message(number, urgent_referral_steps()))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, indicar SAPU", "No por ahora"],
+                        "Derivación urgente",
+                        "Guía de Ruta",
+                        "route_urgent",
+                        messageId
+                    )
+                )
+
+            else:
+                st["doc_type"] = "no_seguro"
+                st["step"] = "requirements"
+                list_responses.append(text_Message(number, "No te preocupes. Te dejo *requisitos y pasos* útiles:"))
+                list_responses.append(text_Message(number, req_docs_steps()))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, guardar", "No, gracias"],
+                        "Guardar / Recordatorios",
+                        "Guía de Ruta",
+                        "route_save",
+                        messageId
+                    )
+                )
+
+        # Paso: pregunta GES
+        elif step == "ask_ges":
+            if text == "ges_si":
+                st["ges"] = "sí"
+                list_responses.append(text_Message(number, interconsulta_instructions("Sí, es GES")))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, recordarme GES", "No, gracias"],
+                        "Recordatorios",
+                        "Interconsulta GES",
+                        "route_ges_reminder",
+                        messageId
+                    )
+                )
+                st["step"] = "requirements"
+
+            elif text == "ges_no" or text == "ges_ns":
+                st["ges"] = "no/nd"
+                list_responses.append(text_Message(number, interconsulta_instructions("No")))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, indicar sede", "No, gracias"],
+                        "SOME CESFAM",
+                        "Interconsulta",
+                        "route_some_site",
+                        messageId
+                    )
+                )
+                st["step"] = "requirements"
+
+            else:
+                # Respuesta libre: tratamos como no sabe
+                st["ges"] = "nd"
+                list_responses.append(text_Message(number, interconsulta_instructions("No")))
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, indicar sede", "No, gracias"],
+                        "SOME CESFAM",
+                        "Interconsulta",
+                        "route_some_site",
+                        messageId
+                    )
+                )
+                st["step"] = "requirements"
+
+        # Paso: exámenes -> ayuno sí/no
+        elif step == "exams":
+            if text == "ayuno_si":
+                list_responses.append(text_Message(
+                    number,
+                    "💡 Tip general: muchos perfiles requieren *8–12 h* de ayuno (verifica en tu orden o SOME)."
+                ))
+            else:
+                list_responses.append(text_Message(
+                    number,
+                    "👍 Ok. Si dudas, confírmalo al agendar en SOME/laboratorio."
+                ))
+            st["step"] = "requirements"
+            list_responses.append(text_Message(number, req_docs_steps()))
+            list_responses.append(
+                buttonReply_Message(
+                    number,
+                    ["Sí, guardar", "No, gracias"],
+                    "Guardar / Recordatorios",
+                    "Guía de Ruta",
+                    "route_save",
+                    messageId
+                )
+            )
+
+        # Paso: receta -> puente a adherencia
+        elif step == "rx":
+            if text == "rx_recordatorios_si":
+                list_responses.append(text_Message(
+                    number,
+                    "✅ Perfecto. Para configurarlos escribe: *recordatorio de medicamento*."
+                ))
+            else:
+                list_responses.append(text_Message(
+                    number,
+                    "👍 Entendido. Si más tarde quieres recordatorios, escribe: *recordatorio de medicamento*."
+                ))
+            st["step"] = "close"
+            list_responses.append(
+                buttonReply_Message(
+                    number,
+                    ["Sí, guardar", "No, gracias"],
+                    "Guardar / Recordatorios",
+                    "Guía de Ruta",
+                    "route_close",
+                    messageId
+                )
+            )
+
+        # Paso: urgente
+        elif step == "urgent":
+            if text == "urgent_sapu_si":
+                list_responses.append(text_Message(
+                    number,
+                    "📍 Envíame tu *comuna o dirección aproximada* y te indico el SAPU más cercano."
+                ))
+            else:
+                list_responses.append(text_Message(
+                    number,
+                    "⚠️ Recuerda: en una urgencia, acude *de inmediato* o llama al 131."
+                ))
+            st["step"] = "requirements"
+            list_responses.append(text_Message(number, req_docs_steps()))
+            list_responses.append(
+                buttonReply_Message(
+                    number,
+                    ["Sí, guardar", "No, gracias"],
+                    "Guardar / Recordatorios",
+                    "Guía de Ruta",
+                    "route_save",
+                    messageId
+                )
+            )
+
+        # Paso: guardar/cerrar
+        elif step in ("requirements", "close"):
+            if text in ("guardar_si", "cerrar_guardar_si", "ges_reminder_si", "sede_si"):
+                list_responses.append(text_Message(
+                    number,
+                    "✅ Perfecto. Guardado correctamente. Puedo recordarte revisar SOME o el estado de tu trámite cuando lo indiques."
+                ))
+            else:
+                list_responses.append(text_Message(
+                    number,
+                    "👍 Entendido. Si necesitas volver a la *Guía de Ruta*, escribe: *guía de ruta*."
+                ))
+            route_sessions.pop(number, None)
+
+        # 👉 ENVÍA Y SALE (importante para no procesar más)
+        for i, payload in enumerate(list_responses):
+            if payload and payload.strip():
+                enviar_Mensaje_whatsapp(payload)
+            if i < len(list_responses) - 1:
+                time.sleep(1)
+        return
+
     # 8) Default
     else:
         list_responses.append(text_Message(number, respuesta_no_entendido))
@@ -2918,3 +3027,4 @@ def send_due_reminders():
     except Exception as e:
         print(f"[cron-reminders] excepción: {e}")
         raise
+
