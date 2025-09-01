@@ -1565,9 +1565,8 @@ def administrar_chatbot(text, number, messageId, name):
         # filas del listado "Más opciones"
         "menu_mas_row_1": "orientacion de sintomas",
         "menu_mas_row_2": "guia de ruta",
-        "menu_mas_row_3": "explicador de documentos",
-        "menu_mas_row_4": "stock de medicamentos",
-        "menu_mas_row_5": "gestionar recordatorios",
+        "menu_mas_row_3": "stock de medicamentos",
+        "menu_mas_row_4": "gestionar recordatorios",
 
         # Especialidades – página 1
         "cita_especialidad_row_1": "medicina general",
@@ -1663,6 +1662,13 @@ def administrar_chatbot(text, number, messageId, name):
     # --- Disparadores por keyword (texto) de Guía de Ruta ---
     if ("guia de ruta" in text or "derivacion" in text or "ruta de atencion" in text):
         list_responses.append(start_route_flow(number, messageId))
+        # Envía inmediatamente y sale
+        for i, payload in enumerate(list_responses):
+            if payload and payload.strip():
+                enviar_Mensaje_whatsapp(payload)
+            if i < len(list_responses) - 1:
+                time.sleep(1)
+        return
 
     # Si el usuario ya está dentro del flujo
     elif number in route_sessions:
@@ -1983,7 +1989,6 @@ def administrar_chatbot(text, number, messageId, name):
         opciones_mas = [
             "🩺 Orientación de Síntomas",
             "🧾 Guía de Ruta / Derivaciones",
-            "📄 Explicador de Documentos",
             "💊 Stock de Medicamentos",
             "⏰ Gestionar Recordatorios"
         ]
@@ -2407,17 +2412,6 @@ def administrar_chatbot(text, number, messageId, name):
         return
 
     # Nuevas opciones del menú "Más opciones"
-    elif text == "explicador de documentos":
-        list_responses.append(text_Message(
-            number,
-            "📄 *Explicador de Documentos*\n"
-            "Puedo ayudarte a entender documentos médicos como:\n"
-            "• Resultados de exámenes\n"
-            "• Informes médicos\n"
-            "• Recetas médicas\n\n"
-            "Envía una foto o descripción del documento que necesitas entender."
-        ))
-
     elif text == "stock de medicamentos":
         stock_sessions[number] = {"step": "activate"}
         body = ("💊 *Gestión de Retiro de Medicamentos*\n"
