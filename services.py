@@ -1355,81 +1355,78 @@ def handle_orientacion(text, number, messageId):
 
     known = {
         "respiratorio": [
-            "tos leve", "tos seca", "tos persistente", "tos",
-            "fiebre", "fiebre alta", "estornudos", "congestion nasal", "congestión nasal",
+            "tos seca", "tos persistente", "tos con flema",
+            "fiebre respiratoria", "estornudos frecuentes", "congestión nasal",
             "dolor de garganta", "dolor al tragar", "garganta inflamada",
-            "cansancio", "dolores musculares", "dolor en el pecho", "pecho apretado",
-            "flema", "silbidos", "picazón", "picazon", "pérdida de olfato",
-            "opresión torácica", "opresion toracica"
+            "cansancio respiratorio", "dolores musculares gripales", "dolor torácico al respirar",
+            "flema", "silbidos al respirar", "pérdida de olfato",
+            "opresión torácica", "dificultad para respirar"
         ],
         "bucal": [
-            "dolor punzante", "sensibilidad",
+            "dolor punzante dental", "sensibilidad dental",
             "encías inflamadas", "encías retraídas",
-            "sangrado", "mal aliento",
-            "llagas", "pequeñas", "dolorosas",
-            "dolor al masticar", "tensión mandibular",
-            "movilidad", "dolor mandibular", "rechinar"
+            "sangrado de encías", "mal aliento persistente",
+            "llagas bucales", "úlceras pequeñas", "dolor al masticar",
+            "tensión mandibular", "dolor mandibular", "rechinar dientes"
         ],
         "infeccioso": [
-            "ardor al orinar", "fiebre", "orina frecuente",
-            "diarrea", "vómitos", "dolor abdominal",
-            "manchas", "picazón", "picazon", "ictericia"
+            "ardor al orinar infeccioso", "fiebre infecciosa", "orina frecuente",
+            "diarrea infecciosa", "vómitos", "dolor abdominal infeccioso",
+            "manchas infecciosas", "ictericia", "escalofríos"
         ],
         "cardiovascular": [
-            "dolor en el pecho", "palpitaciones", "cansancio", "mareos",
-            "falta de aire", "hinchazón", "hinchazon", "sudor frío", "sudor frio",
-            "náuseas", "presión", "presion",
-            "dolor al caminar", "desaparece", "brazo izquierdo"
+            "dolor torácico cardíaco", "palpitaciones", "cansancio cardíaco", "mareos cardiovasculares",
+            "falta de aire", "hinchazón en piernas", "sudor frío cardíaco",
+            "náuseas cardíacas", "presión en pecho",
+            "dolor al caminar", "dolor en brazo izquierdo"
         ],
         "metabolico": [
-            "sed excesiva", "orina frecuentemente", "pérdida de peso", "aumento de peso",
-            "cansancio", "visión borrosa", "vision borrosa", "colesterol", "antecedentes",
-            "nerviosismo", "sudoración", "sudoracion", "circunferencia abdominal",
-            "sobrepeso", "piel seca", "intolerancia al frio", "intolerancia al frío"
+            "sed excesiva", "orina frecuente metabólica", "pérdida de peso inexplicada", "aumento de peso",
+            "cansancio metabólico", "visión borrosa metabólica", "colesterol alto", "antecedentes familiares",
+            "nerviosismo", "sudoración excesiva", "circunferencia abdominal aumentada",
+            "sobrepeso", "piel seca", "intolerancia al frío"
         ],
         "neurologico": [
-            "dolor de cabeza", "pulsatil", "pulsátil", "náuseas", "nauseas",
-            "fotofobia", "estrés", "estres", "tensión", "tension",
-            "temblores", "lentitud", "rigidez", "sacudidas", "desmayo",
-            "confusión", "confusion", "pérdida de memoria", "perdida de memoria",
-            "desorientación", "desorientacion",
-            "hormigueo", "fatiga", "dolor facial", "punzante"
+            "dolor de cabeza pulsátil", "migraña", "fotofobia",
+            "estrés", "tensión nerviosa", "temblores",
+            "lentitud de movimientos", "rigidez neurológica", "sacudidas", "desmayo",
+            "confusión mental", "pérdida de memoria", "desorientación",
+            "hormigueo", "fatiga neurológica", "dolor facial", "entumecimiento"
         ],
         "musculoesqueletico": [
-            "dolor en espalda baja", "dolor articular", "inflamación",
-            "rigidez", "dolor muscular", "fatiga", "torcedura", "bursa"
+            "dolor en espalda baja", "dolor articular", "inflamación articular",
+            "rigidez matutina", "dolor muscular", "fatiga muscular", "esguince", "bursitis"
         ],
         "saludmental": [
             "ansiedad", "dificultad para relajarse", "tristeza persistente",
-            "pérdida de interés", "fatiga", "cambios extremos", "hiperactividad",
+            "pérdida de interés", "fatiga mental", "cambios de humor extremos", "hiperactividad",
             "ataques de pánico", "miedo a morir", "flashbacks", "hipervigilancia",
             "compulsiones", "pensamientos repetitivos"
         ],
         "dermatologico": [
-            "granos", "picazón", "picazon", "erupción", "erupcion",
-            "escamas", "engrosadas", "ampolla", "ronchas", "aparecen",
-            "lesión redonda", "lesion redonda", "borde rojo", "bultos", "duros"
+            "granos", "picazón cutánea", "erupción cutánea",
+            "escamas en piel", "ampollas", "ronchas",
+            "lesión redonda", "borde rojo", "bultos duros", "manchas dermatológicas"
         ],
         "otorrinolaringologico": [
-            "ojos rojos", "picazón", "picazon", "secreción", "secrecion",
-            "dolor de oído", "dolor de oido", "fiebre", "tapado",
-            "presion en cara", "presión en cara", "secrecion nasal espesa",
-            "zumbido", "visión borrosa", "vision borrosa", "halos",
-            "dificultad para ver", "vision nublada", "visión nublada"
+            "ojos rojos", "picazón ocular", "secreción ocular",
+            "dolor de oído", "fiebre ORL", "oído tapado",
+            "presión en cara", "secreción nasal espesa",
+            "zumbido en oídos", "visión borrosa ocular", "halos visuales",
+            "dificultad para ver", "visión nublada"
         ],
         "ginecologico": [
-            "dolor al orinar", "orina turbia", "turbia", "fiebre",
-            "flujo anormal", "picazón", "picazon", "ardor",
-            "dolor pélvico", "dolor pelvico", "menstruación dolorosa",
-            "menstruacion dolorosa", "sangrado menstrual",
-            "irritabilidad", "dolor mamario", "cambios premenstruales",
-            "dolor testicular", "perineal"
+            "dolor al orinar ginecológico", "orina turbia", "fiebre ginecológica",
+            "flujo anormal", "picazón vaginal", "ardor vaginal",
+            "dolor pélvico", "menstruación dolorosa", "sangrado menstrual irregular",
+            "irritabilidad premenstrual", "dolor mamario", "cambios premenstruales",
+            "dolor testicular", "dolor perineal"
         ],
         "digestivo": [
-            "acidez", "ardor", "comer", "aliment", "diarrea",
-            "estreñimiento", "evacuaciones difíciles", "evacuaciones dificiles",
-            "dolor abdominal", "dolor al evacuar", "gases", "hinchazón",
-            "hinchazon", "sangrado", "lacteos", "lácteos"
+            "acidez estomacal", "ardor estomacal", "problemas al comer",
+            "diarrea digestiva", "estreñimiento", "evacuaciones difíciles",
+            "dolor abdominal digestivo", "dolor al evacuar", "gases intestinales",
+            "hinchazón abdominal", "sangrado digestivo", "intolerancia a lácteos"
         ],
     }
 
@@ -1631,8 +1628,9 @@ def administrar_chatbot(text, number, messageId, name):
         "orientacion_categorias_row_10": "ver más ➡️",
 
         # Orientación de síntomas – página 2
-        "orientacion_categorias2_row_1": "orientacion_ginecologico_extraccion",
-        "orientacion_categorias2_row_2": "orientacion_digestivo_extraccion",
+        "orientacion_categorias2_row_1": "orientacion_otorrinolaringologico_extraccion",
+        "orientacion_categorias2_row_2": "orientacion_ginecologico_extraccion",
+        "orientacion_categorias2_row_3": "orientacion_digestivo_extraccion",
 
         # --- Stock / Retiro de Medicamentos ---
         "stock_activa_row_1": "stock_si",
@@ -2359,7 +2357,7 @@ def administrar_chatbot(text, number, messageId, name):
             "Neurológicas 🧠",
             "Músculo 💪",
             "Salud Mental 🧘",
-            "Dermatologicas 🩹",
+            "Dermatológicas 🩹",
             "Ver más ➡️",
         ]
         enviar_Mensaje_whatsapp(
@@ -2370,6 +2368,7 @@ def administrar_chatbot(text, number, messageId, name):
     # 5.1) Paginación: si el usuario elige "Ver más ➡️", mostramos las categorías adicionales
     elif text == "ver más ➡️":
         opts2 = [
+            "Otorrinolaringológicas 👂",
             "Ginecológicas 👩‍⚕️",
             "Digestivas 🍽️",
         ]
@@ -2395,6 +2394,7 @@ def administrar_chatbot(text, number, messageId, name):
             "musculoesqueletico": "Musculoesqueléticas",
             "saludmental": "Salud Mental",
             "dermatologico": "Dermatológicas",
+            "otorrinolaringologico": "Otorrinolaringológicas",
             "ginecologico": "Ginecológicas/Urológicas",
             "digestivo": "Digestivas"
         }.get(categoria, categoria)
