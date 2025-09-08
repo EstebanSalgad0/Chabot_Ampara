@@ -144,23 +144,6 @@ def exams_steps():
         "¿Quieres que revisemos si tu examen requiere *ayuno*?"
     )
 
-def urgent_referral_steps():
-    return (
-        "🚨 *Derivación urgente*\n"
-        "• Debes acudir *de inmediato* al servicio indicado (SAPU/SAR o Urgencia hospitalaria).\n"
-        "• Si empeoras en el trayecto, llama al 131 (SAMU).\n"
-        "¿Te indico el SAPU más cercano si me das tu comuna?"
-    )
-
-def req_docs_steps():
-    return (
-        "🧾 *Checklist de requisitos frecuentes*\n"
-        "• Orden/interconsulta\n"
-        "• Cédula de identidad\n"
-        "• Exámenes previos (si los hay)\n"
-        "• A veces: cartola del Registro Social de Hogares\n"
-        "¿Quieres que lo guarde y te envíe *recordatorios*?"
-    )
 # ==================== FIN HELPERS GUÍA DE RUTA ====================
 
 # Única definición de estado de sesión
@@ -357,6 +340,111 @@ def obtener_Mensaje_whatsapp(message):
 # ===================================================================
 # HELPERS DE NEGOCIO - STOCK & PICKUPS
 # ===================================================================
+
+# ===================================================================
+# HELPERS ESPECÍFICOS PARA GUÍA DE RUTA
+# ===================================================================
+
+def urgent_referral_steps():
+    """Pasos específicos para derivación urgente"""
+    return (
+        "🚨 *Derivación Urgente*\n\n"
+        "Si tienes una derivación urgente:\n"
+        "• 🏥 Dirígete inmediatamente al servicio de urgencias indicado\n"
+        "• 📋 Lleva tu documento de identidad y tu derivación\n"
+        "• ⏰ No requiere hora agendada\n"
+        "• 🩺 En casos graves, llama al 131 (SAMU)\n\n"
+        "¿Necesitas que te indique el SAPU más cercano?"
+    )
+
+def interconsulta_steps():
+    """Pasos específicos para interconsulta"""
+    return (
+        "📋 *Interconsulta Médica*\n\n"
+        "Para tu interconsulta:\n"
+        "• 📞 Agenda hora en SOME del centro indicado\n"
+        "• 📋 Lleva documento de identidad y derivación\n"
+        "• 🕐 Llega 15 minutos antes de tu hora\n"
+        "• 📝 Prepara lista de medicamentos actuales\n"
+        "• 🩺 Si tienes exámenes previos, llévalos"
+    )
+
+def exams_steps():
+    """Pasos específicos para exámenes"""
+    return (
+        "🔬 *Orden de Exámenes*\n\n"
+        "Para tus exámenes:\n"
+        "• 📞 Agenda en laboratorio o centro indicado\n"
+        "• 📋 Lleva documento de identidad y orden médica\n"
+        "• ⏰ Verifica horarios de toma de muestras\n"
+        "• 💧 Confirma si requiere ayuno\n"
+        "• 📊 Resultados generalmente en 24-48 hrs"
+    )
+
+def prescription_steps():
+    """Pasos específicos para recetas"""
+    return (
+        "💊 *Receta/Indicación de Tratamiento*\n\n"
+        "Para tu receta:\n"
+        "• 🏪 Retira en farmacia del centro o externa\n"
+        "• 📋 Lleva documento de identidad y receta\n"
+        "• ⏰ Verifica horarios de atención farmacia\n"
+        "• 💰 Consulta copago si corresponde\n"
+        "• 📝 Lee indicaciones y contraindicaciones"
+    )
+
+def general_route_requirements():
+    """Requisitos generales para cualquier derivación"""
+    return (
+        "📋 *Requisitos Generales*\n\n"
+        "Para cualquier atención:\n"
+        "• 📱 Documento de identidad vigente\n"
+        "• 📄 Derivación o documento médico original\n"
+        "• 💳 Credencial de salud (Fonasa/Isapre)\n"
+        "• 📝 Lista de medicamentos actuales\n"
+        "• 🏥 Confirma centro de atención correcto"
+    )
+
+def req_docs_steps():
+    """Requisitos de documentos para derivaciones"""
+    return (
+        "📋 *Checklist de requisitos frecuentes*\n\n"
+        "• 📄 Orden/interconsulta original\n"
+        "• 📱 Cédula de identidad vigente\n"
+        "• 💳 Credencial de salud (Fonasa/Isapre)\n"
+        "• 🔬 Exámenes previos (si los hay)\n"
+        "• 📊 A veces: cartola del Registro Social de Hogares\n\n"
+        "¿Quieres que configure recordatorios para tu cita?"
+    )
+
+def get_nearest_sapu(comuna):
+    """Obtiene información del SAPU más cercano según la comuna"""
+    comuna = comuna.lower().strip()
+    
+    # Base de datos básica de SAPUs (puedes expandir esto)
+    sapus = {
+        "talca": "🏥 *SAPU Talca*\nDirección: 1 Norte 1141, Talca\nTeléfono: 71-2200100\nAtención: 24 horas",
+        "curicó": "🏥 *SAPU Curicó*\nDirección: Estado 1050, Curicó\nTeléfono: 75-2310400\nAtención: 24 horas",
+        "curico": "🏥 *SAPU Curicó*\nDirección: Estado 1050, Curicó\nTeléfono: 75-2310400\nAtención: 24 horas",
+        "linares": "🏥 *SAPU Linares*\nDirección: Independencia 290, Linares\nTeléfono: 73-2261100\nAtención: 24 horas",
+        "molina": "🏥 *SAPU Molina*\nDirección: Abate Juan Ignacio Molina 940, Molina\nTeléfono: 75-2481568\nAtención: 24 horas",
+        "cauquenes": "🏥 *SAPU Cauquenes*\nDirección: Sargento Aldea 1001, Cauquenes\nTeléfono: 73-2510524\nAtención: 24 horas"
+    }
+    
+    # Buscar coincidencias
+    for key, info in sapus.items():
+        if key in comuna:
+            return f"📍 SAPU más cercano encontrado:\n\n{info}"
+    
+    # Si no encuentra coincidencia exacta
+    return (
+        f"📍 No encontré un SAPU específico para '{comuna}'.\n\n"
+        "🏥 *SAPUs de la región del Maule:*\n"
+        "• SAPU Talca: 71-2200100\n"
+        "• SAPU Curicó: 75-2310400\n"
+        "• SAPU Linares: 73-2261100\n\n"
+        "🚨 *En emergencia, llama al 131 (SAMU)*"
+    )
 
 # ============ STOCK ============
 def stock_add_or_update(name: str, qty: int, location: str = None, price: int = None):
@@ -1807,8 +1895,8 @@ def administrar_chatbot(text, number, messageId, name):
                     buttonReply_Message(
                         number,
                         ["Sí, indicar SAPU", "No por ahora"],
+                        "¿Necesitas ubicación de SAPU?",
                         "Derivación urgente",
-                        "Guía de Ruta",
                         "route_urgent",
                         messageId
                     )
@@ -1818,7 +1906,18 @@ def administrar_chatbot(text, number, messageId, name):
                 st["doc_type"] = "no_seguro"
                 st["step"] = "requirements"
                 list_responses.append(text_Message(number, "No te preocupes. Te dejo *requisitos y pasos* útiles:"))
-                list_responses.append(text_Message(number, req_docs_steps()))
+                list_responses.append(text_Message(number, general_route_requirements()))
+                # Para "no seguro" sí tiene sentido ofrecer recordatorios
+                list_responses.append(
+                    buttonReply_Message(
+                        number,
+                        ["Sí, recordatorios", "No, gracias"],
+                        "¿Quieres recordatorios para revisar tu documentación?",
+                        "Guía de Ruta",
+                        "route_save",
+                        messageId
+                    )
+                )
                 list_responses.append(
                     buttonReply_Message(
                         number,
@@ -1908,49 +2007,54 @@ def administrar_chatbot(text, number, messageId, name):
             if text == "rx_recordatorios_si":
                 list_responses.append(text_Message(
                     number,
-                    "Perfecto. Para configurarlos escribe: *recordatorio de medicamento*."
+                    "✅ Perfecto. Para configurar recordatorios de medicamentos, escribe: *recordatorio de medicamento*.\n\n"
+                    "💊 También tienes disponible *stock de medicamentos* para gestionar retiros.\n\n"
+                    "¡Que tengas una pronta recuperación! 🙏"
                 ))
             else:
                 list_responses.append(text_Message(
                     number,
-                    "Entendido. Si más tarde quieres recordatorios, escribe: *recordatorio de medicamento*."
+                    "✅ Entendido. Recuerda:\n\n"
+                    "💊 Si más tarde quieres recordatorios: *recordatorio de medicamento*\n"
+                    "🏪 Para gestionar retiros: *stock de medicamentos*\n\n"
+                    "¡Sigue las indicaciones médicas y que te mejores pronto! 🙏"
                 ))
-            st["step"] = "close"
-            list_responses.append(
-                buttonReply_Message(
-                    number,
-                    ["Sí, guardar", "No, gracias"],
-                    "Guardar / Recordatorios",
-                    "Guía de Ruta",
-                    "route_close",
-                    messageId
-                )
-            )
+            # Finalizar sesión de recetas - no necesita más pasos
+            route_sessions.pop(number, None)
 
         # Paso: urgente
         elif step == "urgent":
             if text == "urgent_sapu_si":
+                st["step"] = "sapu_location"
                 list_responses.append(text_Message(
                     number,
-                    "Envíame tu *comuna o dirección aproximada* y te indico el SAPU más cercano."
+                    "📍 Envíame tu *comuna o dirección aproximada* y te indico el SAPU más cercano.\n\n"
+                    "✍️ *Escribe tu respuesta directamente*"
                 ))
             else:
+                # Usuario dijo "No por ahora" - finalizar el flujo de urgencia
                 list_responses.append(text_Message(
                     number,
-                    "Recuerda: en una urgencia, acude *de inmediato* o llama al 131."
+                    "🚨 Recuerda: en una derivación urgente, debes acudir *de inmediato* al servicio indicado.\n\n"
+                    "📱 En casos graves, llama al 131 (SAMU).\n\n"
+                    "¡Cuídate y que te mejores pronto! 🙏"
                 ))
-            st["step"] = "requirements"
-            list_responses.append(text_Message(number, req_docs_steps()))
-            list_responses.append(
-                buttonReply_Message(
-                    number,
-                    ["Sí, guardar", "No, gracias"],
-                    "Guardar / Recordatorios",
-                    "Guía de Ruta",
-                    "route_save",
-                    messageId
-                )
-            )
+                # Limpiar la sesión ya que no hay nada más que hacer en urgencias
+                route_sessions.pop(number, None)
+
+        # Paso: ubicación SAPU (solo para derivación urgente)
+        elif step == "sapu_location":
+            comuna = text.lower()
+            # Aquí puedes agregar lógica para encontrar SAPU por comuna
+            sapu_info = get_nearest_sapu(comuna)  # Función que debes implementar
+            list_responses.append(text_Message(number, sapu_info))
+            list_responses.append(text_Message(
+                number,
+                "🚨 Recuerda llevar tu derivación urgente y documento de identidad.\n\n"
+                "¡Ve con cuidado y que te mejores pronto! 🙏"
+            ))
+            # Finalizar sesión
+            route_sessions.pop(number, None)
 
         # Paso: guardar/cerrar
         elif step in ("requirements", "close"):
