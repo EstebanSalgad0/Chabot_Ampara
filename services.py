@@ -1470,8 +1470,11 @@ def handle_orientacion(text, number, messageId):
                     detectados.append(sintoma)
         
         session_states[number]["texto_inicial"] = content
-
+        
         if detectados:
+            # Guardar los síntomas detectados en la sesión para usarlos en el diagnóstico
+            session_states[number]["sintomas_detectados"] = detectados
+            
             body = (
                 f"🩺 He detectado estos síntomas de *{categoria}*:\n"
                 + "\n".join(f"• {d}" for d in detectados)
@@ -1512,12 +1515,16 @@ def handle_orientacion(text, number, messageId):
             respuesta = content.lower().split()[0]
 
         if respuesta == "si":
-            original = session_states[number].get("texto_inicial", "")
+            # Usar los síntomas detectados y confirmados, no el texto original
+            sintomas_confirmados = session_states[number].get("sintomas_detectados", [])
+            # Convertir la lista de síntomas en texto para pasarlo a la función de diagnóstico
+            texto_sintomas = " ".join(sintomas_confirmados)
+            
             func = globals().get(f"diagnostico_{categoria}")
             if not func:
                 cuerpo = "Categoría no reconocida para diagnóstico."
             else:
-                salida = func(original)
+                salida = func(texto_sintomas)
                 if len(salida) == 3:
                     diag, nivel, reco = salida
                 else:
