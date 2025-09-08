@@ -1355,7 +1355,7 @@ def handle_orientacion(text, number, messageId):
 
     known = {
         "respiratorio": [
-            "tos seca", "tos persistente", "tos con flema", "tos",
+            "tos seca", "tos persistente", "tos con flema",
             "fiebre", "estornudos", "congestión nasal", "mocos",
             "dolor de garganta", "dolor al tragar", "garganta inflamada",
             "cansancio", "dolores musculares", "dolor en el pecho",
@@ -1439,7 +1439,26 @@ def handle_orientacion(text, number, messageId):
     # Paso 1: extracción → confirmación con botones
     if paso == "extraccion":
         sym_list = known.get(categoria, [])
-        detectados = [s for s in sym_list if s.lower() in content.lower()]
+        detectados = []
+        content_lower = content.lower()
+        
+        # Detectar síntomas evitando duplicados semánticos
+        for sintoma in sym_list:
+            if sintoma.lower() in content_lower:
+                # Evitar duplicados semánticos (ej: "tos" y "tos seca")
+                es_duplicado = False
+                for ya_detectado in detectados:
+                    if (sintoma in ya_detectado or ya_detectado in sintoma) and sintoma != ya_detectado:
+                        # Si es una versión más específica, reemplazar la genérica
+                        if len(sintoma) > len(ya_detectado):
+                            detectados.remove(ya_detectado)
+                            detectados.append(sintoma)
+                        es_duplicado = True
+                        break
+                
+                if not es_duplicado:
+                    detectados.append(sintoma)
+        
         session_states[number]["texto_inicial"] = content
 
         if detectados:
@@ -1460,7 +1479,9 @@ def handle_orientacion(text, number, messageId):
         else:
             body = (
                 f"🩺 No he detectado síntomas específicos de *{categoria}* en tu descripción.\n\n"
-                f"Por favor, describe nuevamente tus síntomas usando términos más específicos."
+                f"✍️ *Escribe tu respuesta directamente*\n"
+                f"📝 *Por favor, describe nuevamente tus síntomas usando términos más específicos.*\n\n"
+                f"💡 Escribe *sintomas* para ver la lista completa de síntomas detectables."
             )
             session_states.pop(number, None)
             return text_Message(number, body)
@@ -1508,8 +1529,9 @@ def handle_orientacion(text, number, messageId):
             session_states.pop(number, None)
             return text_Message(number, cuerpo)
         else:
-            session_states[number]["paso"] = "extraccion"
-            return text_Message(number, "Entendido. Por favor describe nuevamente tus síntomas.")
+            # Si dice "No", limpiamos la sesión y le pedimos que describa nuevamente
+            session_states.pop(number, None)
+            return text_Message(number, "Entendido. ✍️ *Escribe tu respuesta directamente*\n\n📝 *Por favor describe nuevamente tus síntomas de manera más específica.*\n\n💡 Escribe *sintomas* para ver ejemplos de síntomas detectables.")
 
 
 
@@ -2159,8 +2181,10 @@ def administrar_chatbot(text, number, messageId, name):
         session_states[number]   = {"flow": "med", "step": "ask_name"}
 
         body = (
-            "🌿 ¡Vamos a ayudarte a mantener tu tratamiento al día! 🕒\n"
-            "¿Qué medicamento necesitas que te recuerde tomar?"
+            "🌿 ¡Vamos a ayudarte a mantener tu tratamiento al día! 🕒\n\n"
+            "✍️ *Escribe tu respuesta directamente*\n\n"
+            "📝 *¿Qué medicamento necesitas que te recuerde tomar?*\n\n"
+            "💡 Ejemplo: Paracetamol, Ibuprofeno, Losartán, etc."
         )
         list_responses.append(text_Message(number, body))
 
@@ -2199,8 +2223,9 @@ def administrar_chatbot(text, number, messageId, name):
             flow["step"] = "ask_times"
 
             body = (
-                "Anotaré tus tomas. ¿A qué hora quieres que te lo recuerde? "
-                "(por ejemplo: 08:00 y 20:00)"
+                "✍️ *Escribe tu respuesta directamente*\n\n"
+                "📝 *¿A qué hora quieres que te lo recuerde?*\n\n"
+                "💡 Ejemplo: 08:00 y 20:00, o 8:00, 14:00, 20:00"
             )
             list_responses.append(text_Message(number, body))
 
@@ -2296,7 +2321,10 @@ def administrar_chatbot(text, number, messageId, name):
             "• *guía de ruta* - Derivaciones/interconsultas\n"
             "• *orientación de síntomas* - Diagnóstico orientativo\n\n"
             
-            "🔧 *HERRAMIENTAS*\n"
+            "� *AYUDA DIAGNÓSTICA*\n"
+            "• *sintomas* - Ver síntomas detectables por categoría\n\n"
+            
+            "�🔧 *HERRAMIENTAS*\n"
             "• *debug hora* - Ver hora del servidor\n"
             "• *test en 1 min* - Probar recordatorio inmediato\n\n"
             
@@ -2305,7 +2333,80 @@ def administrar_chatbot(text, number, messageId, name):
             "• *urgente* - Contactos SAMU/Bomberos\n\n"
             
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🤖 *Copia y pega cualquier comando para utilizarlo.*"
+            "🤖 *Copia y pega cualquier comando para utilizarlo.*\n\n"
+            "✍️ *IMPORTANTE:* Cuando veas este ícono, significa que debes escribir tu respuesta directamente (no seleccionar opciones)."
+        )
+        list_responses.append(text_Message(number, body))
+
+    elif text in ["sintomas", "síntomas", "ver sintomas", "lista sintomas"]:
+        body = (
+            "🔍 *SÍNTOMAS DETECTABLES POR CATEGORÍA*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            
+            "🫁 *RESPIRATORIO*\n"
+            "• tos seca, tos persistente, tos con flema\n"
+            "• fiebre, estornudos, congestión nasal, mocos\n"
+            "• dolor de garganta, dolor al tragar\n"
+            "• dificultad para respirar, silbidos\n"
+            "• pérdida de olfato, opresión en el pecho\n\n"
+            
+            "🦷 *BUCAL*\n"
+            "• dolor de muela, dolor dental, sensibilidad\n"
+            "• encías inflamadas, sangrado de encías\n"
+            "• mal aliento, llagas, úlceras\n"
+            "• dolor al masticar, rechino los dientes\n\n"
+            
+            "🔴 *INFECCIOSO*\n"
+            "• ardor al orinar, fiebre, orino mucho\n"
+            "• diarrea, vómitos, dolor abdominal\n"
+            "• manchas en la piel, escalofríos\n\n"
+            
+            "❤️ *CARDIOVASCULAR*\n"
+            "• dolor en el pecho, palpitaciones\n"
+            "• falta de aire, mareos, hinchazón piernas\n"
+            "• sudor frío, presión en el pecho\n\n"
+            
+            "⚖️ *METABÓLICO*\n"
+            "• mucha sed, orino mucho, pérdida peso\n"
+            "• cansancio, visión borrosa, sudo mucho\n"
+            "• sobrepeso, piel seca\n\n"
+            
+            "🧠 *NEUROLÓGICO*\n"
+            "• dolor de cabeza, migraña, fotofobia\n"
+            "• temblores, rigidez, desmayo\n"
+            "• hormigueo, confusión, pérdida memoria\n\n"
+            
+            "💪 *MUSCULOESQUELÉTICO*\n"
+            "• dolor de espalda, dolor articular\n"
+            "• rigidez matutina, dolor muscular\n"
+            "• esguince, dolor rodillas/hombros\n\n"
+            
+            "🧘 *SALUD MENTAL*\n"
+            "• ansiedad, tristeza, depresión\n"
+            "• ataques pánico, cambios humor\n"
+            "• pensamientos repetitivos\n\n"
+            
+            "🟣 *DERMATOLÓGICO*\n"
+            "• granos, picazón, erupción, ronchas\n"
+            "• ampollas, escamas, manchas piel\n\n"
+            
+            "👁️ *OTORRINOLARINGOLÓGICO*\n"
+            "• ojos rojos, dolor oído, oído tapado\n"
+            "• zumbido oídos, visión borrosa\n"
+            "• presión en cara, mucosidad espesa\n\n"
+            
+            "🟡 *GINECOLÓGICO*\n"
+            "• dolor al orinar, flujo vaginal\n"
+            "• dolor pélvico, cólicos menstruales\n"
+            "• dolor testicular (hombres)\n\n"
+            
+            "🟢 *DIGESTIVO*\n"
+            "• acidez, ardor estómago, diarrea\n"
+            "• estreñimiento, dolor abdominal\n"
+            "• gases, hinchazón, sangre heces\n\n"
+            
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💡 *Usa estos términos al describir tus síntomas para una mejor detección.*"
         )
         list_responses.append(text_Message(number, body))
 
@@ -2417,8 +2518,10 @@ def administrar_chatbot(text, number, messageId, name):
         )
 
         prompt = (
-            f"Por favor describe tus síntomas para enfermedades {display}.\n"
-            f"Ejemplo: '{ejemplo}'"
+            f"✍️ *Escribe tu respuesta directamente*\n\n"
+            f"📝 *Por favor describe tus síntomas para enfermedades {display}.*\n\n"
+            f"💡 Ejemplo: '{ejemplo}'\n\n"
+            f"ℹ️ Escribe *sintomas* para ver todos los síntomas detectables."
         )
         enviar_Mensaje_whatsapp(text_Message(number, prompt))
         return
@@ -2442,7 +2545,9 @@ def administrar_chatbot(text, number, messageId, name):
                 ss["step"] = "ask_drug"
                 list_responses.append(text_Message(
                     number,
-                    "💊 Dime el *nombre del medicamento* o envía *foto clara de la receta*."
+                    "✍️ *Escribe tu respuesta directamente*\n\n"
+                    "� *Dime el nombre del medicamento* o envía *foto clara de la receta*.\n\n"
+                    "💡 Ejemplo: Paracetamol, Losartán, Metformina, etc."
                 ))
             else:
                 list_responses.append(text_Message(number,
@@ -2479,7 +2584,7 @@ def administrar_chatbot(text, number, messageId, name):
         elif step == "ask_freq":
             ss["freq_days"] = _parse_freq_to_days(text)
             ss["step"] = "ask_hour"
-            list_responses.append(text_Message(number, "⏰ ¿A qué *hora* te recuerdo? (24h, ej: 08:00)"))
+            list_responses.append(text_Message(number, "✍️ *Escribe tu respuesta directamente*\n\n📝 *¿A qué hora te recuerdo?*\n\n💡 Formato 24h, ejemplo: 08:00, 14:30, 20:00"))
         
         elif step == "ask_hour":
             hour = _hhmm_or_default(text, "08:00")
