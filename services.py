@@ -325,6 +325,16 @@ RECOMENDACIONES_GENERALES = {
 
 
 # -----------------------------------------------------------
+# Disclaimer médico
+# -----------------------------------------------------------
+MEDICAL_DISCLAIMER = (
+    "\n\n⚠️ *IMPORTANTE:* Esta es una orientación general basada en los síntomas descritos. "
+    "No sustituye el diagnóstico médico profesional. Ante síntomas graves o persistentes, "
+    "acude a un centro de salud o consulta a tu médico."
+)
+
+
+# -----------------------------------------------------------
 # Funciones de mensajería y parsing de WhatsApp
 # -----------------------------------------------------------
 def obtener_Mensaje_whatsapp(message):
@@ -1524,11 +1534,13 @@ def handle_orientacion(text, number, messageId):
                         f"Nivel de alerta: *{nivel}*.\n\n"
                         f"{reco}"
                         f"{cierre_general}"
+                        f"{MEDICAL_DISCLAIMER}"
                     )
                 else:
                     cuerpo = (
                         "No se pudo determinar un diagnóstico con la información proporcionada. "
                         "Te recomiendo acudir a un profesional para una evaluación completa."
+                        f"{MEDICAL_DISCLAIMER}"
                     )
             session_states.pop(number, None)
             return text_Message(number, cuerpo)
@@ -2502,7 +2514,7 @@ def administrar_chatbot(text, number, messageId, name):
     # 6) Usuario selecciona categoría: arrancamos orientación
     elif text.startswith("orientacion_") and text.endswith("_extraccion"):
         _, categoria, _ = text.split("_", 2)
-        session_states[number] = {"categoria": categoria, "paso": "extraccion"}
+        session_states[number] = {"orientacion_categoria": categoria, "orientacion_paso": "extraccion"}
 
         display = {
             "respiratorio": "Respiratorias",
