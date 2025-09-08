@@ -1483,7 +1483,11 @@ def handle_orientacion(text, number, messageId):
                 f"📝 *Por favor, describe nuevamente tus síntomas usando términos más específicos.*\n\n"
                 f"💡 Escribe *sintomas* para ver la lista completa de síntomas detectables."
             )
-            session_states.pop(number, None)
+            # Mantener sesión activa para permitir reintentos
+            session_states[number] = {
+                "orientacion_categoria": categoria,
+                "orientacion_paso": "extraccion"
+            }
             return text_Message(number, body)
 
     # Paso 2: confirmación y diagnóstico
@@ -1529,8 +1533,11 @@ def handle_orientacion(text, number, messageId):
             session_states.pop(number, None)
             return text_Message(number, cuerpo)
         else:
-            # Si dice "No", limpiamos la sesión y le pedimos que describa nuevamente
-            session_states.pop(number, None)
+            # Si dice "No", mantenemos la categoría pero volvemos al paso de extracción
+            session_states[number] = {
+                "orientacion_categoria": categoria,
+                "orientacion_paso": "extraccion"
+            }
             return text_Message(number, "Entendido. ✍️ *Escribe tu respuesta directamente*\n\n📝 *Por favor describe nuevamente tus síntomas de manera más específica.*\n\n💡 Escribe *sintomas* para ver ejemplos de síntomas detectables.")
 
 
@@ -2806,6 +2813,24 @@ def administrar_chatbot(text, number, messageId, name):
                 lines.append(f"• {drug} – {date_iso} {hour}{extra} – {status}")
             body = "📋 *Tus retiros:*\n" + "\n".join(lines)
             list_responses.append(text_Message(number, body))
+
+    # 6.5) Manejar sesión activa de orientación de síntomas
+    elif (number in session_states and 
+          "orientacion_categoria" in session_states[number] and 
+          "orientacion_paso" in session_states[number]):
+        # El usuario está en una sesión activa de orientación y escribió nuevos síntomas
+        categoria = session_states[number]["orientacion_categoria"]
+        paso = session_states[number]["orientacion_paso"]
+        
+        if paso == "extraccion":
+            # Procesar los nuevos síntomas como si fuera una nueva solicitud de orientación
+            header_content = f"orientacion_{categoria}_extraccion:{text}"
+            resultado = handle_orientacion(header_content, number, messageId)
+            list_responses.append(resultado)
+        else:
+            # Si no está en extracción, limpiar sesión y mostrar mensaje de error
+            session_states.pop(number, None)
+            list_responses.append(text_Message(number, respuesta_no_entendido))
 
     # 7) Agradecimientos y despedidas
     elif any(w in text for w in ["gracias", "muchas gracias"]):
