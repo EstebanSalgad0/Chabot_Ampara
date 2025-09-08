@@ -1692,6 +1692,32 @@ def administrar_chatbot(text, number, messageId, name):
         "orientacion_categorias2_row_2": "orientacion_ginecologico_extraccion",
         "orientacion_categorias2_row_3": "orientacion_digestivo_extraccion",
 
+        # Botones de confirmación de orientación para todas las categorías
+        "orientacion_respiratorio_confirmacion_btn_1": "orientacion_respiratorio_confirmacion:si",
+        "orientacion_respiratorio_confirmacion_btn_2": "orientacion_respiratorio_confirmacion:no",
+        "orientacion_bucal_confirmacion_btn_1": "orientacion_bucal_confirmacion:si",
+        "orientacion_bucal_confirmacion_btn_2": "orientacion_bucal_confirmacion:no",
+        "orientacion_infeccioso_confirmacion_btn_1": "orientacion_infeccioso_confirmacion:si",
+        "orientacion_infeccioso_confirmacion_btn_2": "orientacion_infeccioso_confirmacion:no",
+        "orientacion_cardiovascular_confirmacion_btn_1": "orientacion_cardiovascular_confirmacion:si",
+        "orientacion_cardiovascular_confirmacion_btn_2": "orientacion_cardiovascular_confirmacion:no",
+        "orientacion_metabolico_confirmacion_btn_1": "orientacion_metabolico_confirmacion:si",
+        "orientacion_metabolico_confirmacion_btn_2": "orientacion_metabolico_confirmacion:no",
+        "orientacion_neurologico_confirmacion_btn_1": "orientacion_neurologico_confirmacion:si",
+        "orientacion_neurologico_confirmacion_btn_2": "orientacion_neurologico_confirmacion:no",
+        "orientacion_musculoesqueletico_confirmacion_btn_1": "orientacion_musculoesqueletico_confirmacion:si",
+        "orientacion_musculoesqueletico_confirmacion_btn_2": "orientacion_musculoesqueletico_confirmacion:no",
+        "orientacion_saludmental_confirmacion_btn_1": "orientacion_saludmental_confirmacion:si",
+        "orientacion_saludmental_confirmacion_btn_2": "orientacion_saludmental_confirmacion:no",
+        "orientacion_dermatologico_confirmacion_btn_1": "orientacion_dermatologico_confirmacion:si",
+        "orientacion_dermatologico_confirmacion_btn_2": "orientacion_dermatologico_confirmacion:no",
+        "orientacion_otorrinolaringologico_confirmacion_btn_1": "orientacion_otorrinolaringologico_confirmacion:si",
+        "orientacion_otorrinolaringologico_confirmacion_btn_2": "orientacion_otorrinolaringologico_confirmacion:no",
+        "orientacion_ginecologico_confirmacion_btn_1": "orientacion_ginecologico_confirmacion:si",
+        "orientacion_ginecologico_confirmacion_btn_2": "orientacion_ginecologico_confirmacion:no",
+        "orientacion_digestivo_confirmacion_btn_1": "orientacion_digestivo_confirmacion:si",
+        "orientacion_digestivo_confirmacion_btn_2": "orientacion_digestivo_confirmacion:no",
+
         # --- Stock / Retiro de Medicamentos ---
         "stock_activa_row_1": "stock_si",
         "stock_activa_row_2": "stock_no_se",
@@ -2551,6 +2577,19 @@ def administrar_chatbot(text, number, messageId, name):
         )
         enviar_Mensaje_whatsapp(text_Message(number, prompt))
         return
+
+    # 6.1) Usuario confirma síntomas detectados
+    elif text.startswith("orientacion_") and text.endswith("_confirmacion:si"):
+        categoria = text.split("_")[1]
+        header_content = f"orientacion_{categoria}_confirmacion:si"
+        resultado = handle_orientacion(header_content, number, messageId)
+        list_responses.append(resultado)
+
+    elif text.startswith("orientacion_") and text.endswith("_confirmacion:no"):
+        categoria = text.split("_")[1]
+        header_content = f"orientacion_{categoria}_confirmacion:no"
+        resultado = handle_orientacion(header_content, number, messageId)
+        list_responses.append(resultado)
 
     # Nuevas opciones del menú "Más opciones"
     elif text == "stock de medicamentos":
