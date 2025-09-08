@@ -1832,7 +1832,9 @@ def administrar_chatbot(text, number, messageId, name):
     # 4.bis) MICRO: Guía de Ruta / Derivaciones
     # -----------------------------------------------------------
     # --- Disparadores por keyword (texto) de Guía de Ruta ---
-    if ("guia de ruta" in text or "derivacion" in text or "ruta de atencion" in text):
+    # Solo activar si NO está ya en una sesión de ruta activa
+    if (("guia de ruta" in text or "derivacion" in text or "ruta de atencion" in text) 
+        and number not in route_sessions):
         list_responses.append(start_route_flow(number, messageId))
         # Envía inmediatamente y sale
         for i, payload in enumerate(list_responses):
@@ -1982,12 +1984,22 @@ def administrar_chatbot(text, number, messageId, name):
             if text == "ayuno_si":
                 list_responses.append(text_Message(
                     number,
-                    "Tip general: muchos perfiles requieren *8–12 h* de ayuno (verifica en tu orden o SOME)."
+                    "🍽️ *Información de Ayuno*\n\n"
+                    "⏰ *Tiempo típico:* 8-12 horas sin comer\n"
+                    "💧 *Sí puedes:* Beber agua\n"
+                    "🚫 *No puedes:* Comida, bebidas azucaradas, café, té, chicles\n\n"
+                    "📋 *Exámenes que típicamente requieren ayuno:*\n"
+                    "• Glicemia en ayunas\n"
+                    "• Perfil lipídico (colesterol, triglicéridos)\n"
+                    "• Insulina basal\n"
+                    "• Perfil bioquímico completo\n\n"
+                    "⚠️ *Importante:* Confirma con tu orden médica o al agendar"
                 ))
             else:
                 list_responses.append(text_Message(
                     number,
-                    "Ok. Si dudas, confírmalo al agendar en SOME/laboratorio."
+                    "✅ Perfecto. La mayoría de exámenes básicos (hemograma, orina, etc.) no requieren ayuno.\n\n"
+                    "💡 Si tienes dudas, siempre pregunta al agendar tu hora."
                 ))
             st["step"] = "requirements"
             list_responses.append(text_Message(number, req_docs_steps()))
@@ -2005,12 +2017,17 @@ def administrar_chatbot(text, number, messageId, name):
         # Paso: receta -> puente a adherencia
         elif step == "rx":
             if text == "rx_recordatorios_si":
+                # Iniciar directamente el flujo de recordatorios de medicamentos
+                medication_sessions[number] = {"step": "setup_name"}
                 list_responses.append(text_Message(
                     number,
-                    "✅ Perfecto. Para configurar recordatorios de medicamentos, escribe: *recordatorio de medicamento*.\n\n"
-                    "💊 También tienes disponible *stock de medicamentos* para gestionar retiros.\n\n"
-                    "¡Que tengas una pronta recuperación! 🙏"
+                    "💊 *Configuración de Recordatorios de Medicamentos*\n\n"
+                    "✍️ *Escribe tu respuesta directamente*\n\n"
+                    "� *¿Cuál es el nombre del medicamento?*\n\n"
+                    "💡 Ejemplo: Losartán, Paracetamol, Metformina"
                 ))
+                # Limpiar la sesión de rutas ya que pasamos a medicamentos
+                route_sessions.pop(number, None)
             else:
                 list_responses.append(text_Message(
                     number,
@@ -2019,8 +2036,8 @@ def administrar_chatbot(text, number, messageId, name):
                     "🏪 Para gestionar retiros: *stock de medicamentos*\n\n"
                     "¡Sigue las indicaciones médicas y que te mejores pronto! 🙏"
                 ))
-            # Finalizar sesión de recetas - no necesita más pasos
-            route_sessions.pop(number, None)
+                # Finalizar sesión de recetas
+                route_sessions.pop(number, None)
 
         # Paso: urgente
         elif step == "urgent":
@@ -2059,15 +2076,34 @@ def administrar_chatbot(text, number, messageId, name):
         # Paso: guardar/cerrar
         elif step in ("requirements", "close"):
             if text in ("guardar_si", "cerrar_guardar_si", "ges_reminder_si", "sede_si"):
-                list_responses.append(text_Message(
-                    number,
-                    "✅ Guardado. Puedo recordarte revisar SOME o el estado de tu interconsulta/derivación cuando lo indiques."
-                ))
+                doc_type = st.get("doc_type", "")
+                
+                # Mensaje personalizado según el tipo de documento
+                if doc_type == "interconsulta":
+                    if st.get("ges") == "sí":
+                        mensaje = "✅ *Recordatorio GES configurado*\n\nTe recordaré verificar el estado de tu interconsulta GES y los plazos de atención."
+                    else:
+                        mensaje = "✅ *Recordatorio de interconsulta configurado*\n\nTe recordaré hacer seguimiento en SOME y verificar la programación de tu hora."
+                elif doc_type == "examenes":
+                    mensaje = "✅ *Recordatorio de exámenes configurado*\n\nTe recordaré sobre tu cita de laboratorio y cuándo revisar los resultados."
+                elif doc_type == "no_seguro":
+                    mensaje = "✅ *Recordatorio de documentación configurado*\n\nTe recordaré revisar tu documentación y aclarar el tipo de derivación."
+                else:
+                    mensaje = "✅ *Recordatorio configurado*\n\nTe recordaré hacer seguimiento de tu documentación médica."
+                
+                list_responses.append(text_Message(number, mensaje))
             else:
-                list_responses.append(text_Message(
-                    number,
-                    "Listo. Si necesitas volver a la *Guía de Ruta*, escribe: *guía de ruta*."
-                ))
+                doc_type = st.get("doc_type", "")
+                
+                # Mensaje de despedida personalizado
+                if doc_type == "interconsulta":
+                    mensaje = "✅ Perfecto. Recuerda ingresar tu interconsulta en SOME del CESFAM.\n\n📱 Si necesitas ayuda nuevamente: *guía de ruta*"
+                elif doc_type == "examenes":
+                    mensaje = "✅ Perfecto. Recuerda agendar tu hora de laboratorio.\n\n📱 Si necesitas ayuda nuevamente: *guía de ruta*"
+                else:
+                    mensaje = "✅ Listo. Si necesitas volver a la *Guía de Ruta*, escribe: *guía de ruta*"
+                
+                list_responses.append(text_Message(number, mensaje))
             route_sessions.pop(number, None)
 
         # 👉 ENVÍA Y SALE
