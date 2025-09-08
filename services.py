@@ -586,9 +586,9 @@ def markRead_Message(messageId):
 def diagnostico_respiratorio(respuestas):
     respuestas = respuestas.lower()
     if (
-        "tos leve" in respuestas
+        ("tos" in respuestas or "tos seca" in respuestas) 
         and "estornudos" in respuestas
-        and "congestion nasal" in respuestas
+        and ("congestión nasal" in respuestas or "mocos" in respuestas)
     ):
         return (
             "Resfriado común",
@@ -596,9 +596,9 @@ def diagnostico_respiratorio(respuestas):
             "Mantén reposo e hidratación, aprovecha líquidos calientes y, si tienes congestión, usa solución salina nasal. Usa mascarilla si estás con personas de riesgo."
         )
     elif (
-        "tos seca" in respuestas
+        ("tos seca" in respuestas or "tos" in respuestas)
         and "fiebre" in respuestas
-        and "dolores musculares" in respuestas
+        and ("dolores musculares" in respuestas or "cansancio" in respuestas)
     ):
         return (
             "Gripe (influenza)",
@@ -618,7 +618,7 @@ def diagnostico_respiratorio(respuestas):
     elif (
         "tos persistente" in respuestas
         and "flema" in respuestas
-        and "pecho apretado" in respuestas
+        and ("dolor en el pecho" in respuestas or "opresión en el pecho" in respuestas)
     ):
         return (
             "Bronquitis",
@@ -626,8 +626,8 @@ def diagnostico_respiratorio(respuestas):
             "Evita irritantes (humo, polvo), mantente hidratado y usa expectorantes de venta libre. Si empeora la dificultad para respirar o la fiebre persiste, acude al médico."
         )
     elif (
-        "fiebre alta" in respuestas
-        and "dificultad respiratoria" in respuestas
+        "fiebre" in respuestas
+        and ("dificultad para respirar" in respuestas or "me ahogo" in respuestas)
     ):
         return (
             "Neumonía",
@@ -635,7 +635,7 @@ def diagnostico_respiratorio(respuestas):
             "Esta combinación sugiere neumonía: acude de inmediato a un servicio de urgencias u hospital."
         )
     elif (
-        "opresión torácica" in respuestas
+        ("opresión en el pecho" in respuestas or "dolor en el pecho" in respuestas)
         and "silbidos" in respuestas
     ):
         return (
@@ -645,7 +645,7 @@ def diagnostico_respiratorio(respuestas):
         )
     elif (
         "estornudos" in respuestas
-        and "congestión nasal" in respuestas
+        and ("congestión nasal" in respuestas or "mocos" in respuestas)
         and "picazón" in respuestas
     ):
         return (
@@ -656,7 +656,7 @@ def diagnostico_respiratorio(respuestas):
     elif (
         "tos seca" in respuestas
         and "fiebre" in respuestas
-        and "pérdida de olfato" in respuestas
+        and ("pérdida de olfato" in respuestas or "no huelo" in respuestas)
     ):
         return (
             "COVID-19",
@@ -670,7 +670,7 @@ def diagnostico_respiratorio(respuestas):
 def diagnostico_bucal(respuestas):
     respuestas = respuestas.lower()
     if (
-        "dolor punzante" in respuestas
+        ("dolor de muela" in respuestas or "dolor dental" in respuestas)
         and "sensibilidad" in respuestas
     ):
         return (
@@ -679,9 +679,9 @@ def diagnostico_bucal(respuestas):
             "Mantén una higiene bucal rigurosa (cepillado y uso de hilo dental), evita alimentos muy ácidos o muy fríos/calientes y consulta a un odontólogo para tratar la cavidad."
         )
     elif (
-        "encías inflamadas" in respuestas
-        and "sangrado" in respuestas
-        and "mal aliento" in respuestas
+        ("encías inflamadas" in respuestas or "encías hinchadas" in respuestas)
+        and ("sangrado de encías" in respuestas or "sangrado" in respuestas)
+        and ("mal aliento" in respuestas or "halitosis" in respuestas)
     ):
         return (
             "Gingivitis",
@@ -709,9 +709,9 @@ def diagnostico_bucal(respuestas):
             "Evita alimentos ácidos o picantes, enjuaga con agua tibia y sal, y utiliza gel o crema tópica para aliviar el dolor. Si duran más de 2 semanas, consulta a tu dentista."
         )
     elif (
-        "dolor mandibular" in respuestas
-        and "tensión" in respuestas
-        and "rechinar" in respuestas
+        ("dolor de mandíbula" in respuestas or "dolor mandibular" in respuestas)
+        and ("tensión en la mandíbula" in respuestas or "tensión" in respuestas)
+        and ("rechino los dientes" in respuestas or "rechinar" in respuestas)
     ):
         return (
             "Bruxismo",
@@ -1355,78 +1355,82 @@ def handle_orientacion(text, number, messageId):
 
     known = {
         "respiratorio": [
-            "tos seca", "tos persistente", "tos con flema",
-            "fiebre respiratoria", "estornudos frecuentes", "congestión nasal",
+            "tos seca", "tos persistente", "tos con flema", "tos",
+            "fiebre", "estornudos", "congestión nasal", "mocos",
             "dolor de garganta", "dolor al tragar", "garganta inflamada",
-            "cansancio respiratorio", "dolores musculares gripales", "dolor torácico al respirar",
-            "flema", "silbidos al respirar", "pérdida de olfato",
-            "opresión torácica", "dificultad para respirar"
+            "cansancio", "dolores musculares", "dolor en el pecho",
+            "flema", "silbidos", "pérdida de olfato", "no huelo",
+            "opresión en el pecho", "dificultad para respirar", "me ahogo"
         ],
         "bucal": [
-            "dolor punzante dental", "sensibilidad dental",
-            "encías inflamadas", "encías retraídas",
-            "sangrado de encías", "mal aliento persistente",
-            "llagas bucales", "úlceras pequeñas", "dolor al masticar",
-            "tensión mandibular", "dolor mandibular", "rechinar dientes"
+            "dolor de muela", "dolor dental", "sensibilidad",
+            "encías inflamadas", "encías hinchadas", "encías retraídas",
+            "sangrado de encías", "mal aliento", "halitosis",
+            "llagas", "úlceras", "dolor al masticar",
+            "tensión en la mandíbula", "dolor de mandíbula", "rechino los dientes"
         ],
         "infeccioso": [
-            "ardor al orinar infeccioso", "fiebre infecciosa", "orina frecuente",
-            "diarrea infecciosa", "vómitos", "dolor abdominal infeccioso",
-            "manchas infecciosas", "ictericia", "escalofríos"
+            "ardor al orinar", "dolor al orinar", "fiebre", "orino mucho",
+            "diarrea", "vómitos", "dolor de estómago", "dolor abdominal",
+            "manchas en la piel", "ictericia", "escalofríos", "temblores"
         ],
         "cardiovascular": [
-            "dolor torácico cardíaco", "palpitaciones", "cansancio cardíaco", "mareos cardiovasculares",
-            "falta de aire", "hinchazón en piernas", "sudor frío cardíaco",
-            "náuseas cardíacas", "presión en pecho",
-            "dolor al caminar", "dolor en brazo izquierdo"
+            "dolor en el pecho", "palpitaciones", "cansancio", "mareos",
+            "falta de aire", "hinchazón en piernas", "sudor frío",
+            "náuseas", "presión en el pecho",
+            "dolor al caminar", "dolor en el brazo izquierdo"
         ],
         "metabolico": [
-            "sed excesiva", "orina frecuente metabólica", "pérdida de peso inexplicada", "aumento de peso",
-            "cansancio metabólico", "visión borrosa metabólica", "colesterol alto", "antecedentes familiares",
-            "nerviosismo", "sudoración excesiva", "circunferencia abdominal aumentada",
-            "sobrepeso", "piel seca", "intolerancia al frío"
+            "mucha sed", "sed excesiva", "orino mucho", "pérdida de peso", "bajo de peso",
+            "aumento de peso", "subí de peso", "cansancio", "visión borrosa",
+            "colesterol alto", "antecedentes familiares", "diabetes en familia",
+            "nerviosismo", "sudo mucho", "barriga grande", "circunferencia abdominal",
+            "sobrepeso", "piel seca", "tengo frío"
         ],
         "neurologico": [
-            "dolor de cabeza pulsátil", "migraña", "fotofobia",
-            "estrés", "tensión nerviosa", "temblores",
-            "lentitud de movimientos", "rigidez neurológica", "sacudidas", "desmayo",
-            "confusión mental", "pérdida de memoria", "desorientación",
-            "hormigueo", "fatiga neurológica", "dolor facial", "entumecimiento"
+            "dolor de cabeza", "migraña", "jaqueca", "fotofobia", "molesta la luz",
+            "estrés", "tensión", "temblores",
+            "movimientos lentos", "rigidez", "sacudidas", "desmayo", "me desmayé",
+            "confusión", "pérdida de memoria", "no recuerdo", "desorientación",
+            "hormigueo", "entumecimiento", "fatiga", "dolor facial"
         ],
         "musculoesqueletico": [
-            "dolor en espalda baja", "dolor articular", "inflamación articular",
-            "rigidez matutina", "dolor muscular", "fatiga muscular", "esguince", "bursitis"
+            "dolor de espalda", "dolor en la espalda baja", "lumbago",
+            "dolor en las articulaciones", "articulaciones inflamadas",
+            "rigidez matutina", "dolor muscular", "fatiga muscular",
+            "esguince", "bursitis", "dolor en las rodillas", "dolor en los hombros"
         ],
         "saludmental": [
-            "ansiedad", "dificultad para relajarse", "tristeza persistente",
-            "pérdida de interés", "fatiga mental", "cambios de humor extremos", "hiperactividad",
-            "ataques de pánico", "miedo a morir", "flashbacks", "hipervigilancia",
-            "compulsiones", "pensamientos repetitivos"
+            "ansiedad", "nervios", "no puedo relajarme", "tristeza", "depresión",
+            "pérdida de interés", "no tengo ganas", "fatiga mental", "cambios de humor",
+            "hiperactividad", "ataques de pánico", "miedo a morir",
+            "flashbacks", "recuerdos traumáticos", "hipervigilancia",
+            "compulsiones", "pensamientos repetitivos", "obsesiones"
         ],
         "dermatologico": [
-            "granos", "picazón cutánea", "erupción cutánea",
-            "escamas en piel", "ampollas", "ronchas",
-            "lesión redonda", "borde rojo", "bultos duros", "manchas dermatológicas"
+            "granos", "acné", "picazón", "comezón", "erupción", "sarpullido",
+            "escamas", "piel escamosa", "ampollas", "ronchas", "urticaria",
+            "lesión redonda", "mancha roja", "bultos", "manchas en la piel"
         ],
         "otorrinolaringologico": [
-            "ojos rojos", "picazón ocular", "secreción ocular",
-            "dolor de oído", "fiebre ORL", "oído tapado",
-            "presión en cara", "secreción nasal espesa",
-            "zumbido en oídos", "visión borrosa ocular", "halos visuales",
-            "dificultad para ver", "visión nublada"
+            "ojos rojos", "picazón en los ojos", "lagrimeo", "secreción en los ojos",
+            "dolor de oído", "fiebre", "oído tapado", "sordera",
+            "presión en la cara", "mucosidad espesa", "mocos verdes",
+            "zumbido en los oídos", "visión borrosa", "veo borroso", "halos",
+            "no veo bien", "visión nublada"
         ],
         "ginecologico": [
-            "dolor al orinar ginecológico", "orina turbia", "fiebre ginecológica",
-            "flujo anormal", "picazón vaginal", "ardor vaginal",
-            "dolor pélvico", "menstruación dolorosa", "sangrado menstrual irregular",
-            "irritabilidad premenstrual", "dolor mamario", "cambios premenstruales",
-            "dolor testicular", "dolor perineal"
+            "dolor al orinar", "orina turbia", "fiebre", 
+            "flujo vaginal", "flujo anormal", "picazón vaginal", "ardor vaginal",
+            "dolor pélvico", "cólicos menstruales", "regla dolorosa", "sangrado irregular",
+            "irritabilidad premenstrual", "dolor en los senos", "senos hinchados",
+            "dolor testicular", "dolor en los testículos", "dolor perineal"
         ],
         "digestivo": [
-            "acidez estomacal", "ardor estomacal", "problemas al comer",
-            "diarrea digestiva", "estreñimiento", "evacuaciones difíciles",
-            "dolor abdominal digestivo", "dolor al evacuar", "gases intestinales",
-            "hinchazón abdominal", "sangrado digestivo", "intolerancia a lácteos"
+            "acidez", "ardor en el estómago", "agruras", "problemas para comer",
+            "diarrea", "estreñimiento", "no puedo defecar", "evacuaciones difíciles",
+            "dolor de estómago", "dolor abdominal", "dolor al defecar", "gases",
+            "hinchazón abdominal", "sangre en las heces", "intolerancia a lácteos"
         ],
     }
 
@@ -1435,23 +1439,31 @@ def handle_orientacion(text, number, messageId):
     # Paso 1: extracción → confirmación con botones
     if paso == "extraccion":
         sym_list = known.get(categoria, [])
-        detectados = [s for s in sym_list if s in content.lower()]
+        detectados = [s for s in sym_list if s.lower() in content.lower()]
         session_states[number]["texto_inicial"] = content
 
-        body = (
-            f"🩺 He detectado estos síntomas de *{categoria}*:\n"
-            + "\n".join(f"- {d}" for d in (detectados or ["(ninguno)"]))
-        )
-        footer = "¿Es correcto?"
-        buttons = ["Si ✅", "No ❌"]
-        return buttonReply_Message(
-            number,
-            buttons,
-            body,
-            footer,
-            f"orientacion_{categoria}_confirmacion",
-            messageId
-        )
+        if detectados:
+            body = (
+                f"🩺 He detectado estos síntomas de *{categoria}*:\n"
+                + "\n".join(f"• {d}" for d in detectados)
+            )
+            footer = "¿Es correcto?"
+            buttons = ["Si ✅", "No ❌"]
+            return buttonReply_Message(
+                number,
+                buttons,
+                body,
+                footer,
+                f"orientacion_{categoria}_confirmacion",
+                messageId
+            )
+        else:
+            body = (
+                f"🩺 No he detectado síntomas específicos de *{categoria}* en tu descripción.\n\n"
+                f"Por favor, describe nuevamente tus síntomas usando términos más específicos."
+            )
+            session_states.pop(number, None)
+            return text_Message(number, body)
 
     # Paso 2: confirmación y diagnóstico
     if paso == "confirmacion":
