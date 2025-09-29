@@ -195,7 +195,7 @@ def administrar_chatbot(text, number, messageId, name):
         ]
         body = (
             f"¡Hola {name}! 👋\n"
-            "Soy *Mateo*, tu asistente escolar.\n"
+            "Soy *Agente Educacional IAN*, tu asistente escolar.\n"
             "¿En qué puedo ayudarte hoy?"
         )
         footer = "Menú Principal"
