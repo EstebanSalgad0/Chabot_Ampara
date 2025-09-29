@@ -95,14 +95,14 @@ def obtener_Mensaje_whatsapp(message):
 
 
 def enviar_Mensaje_whatsapp(data):
-    headers = {'Content-Type': 'application/json', 'Authorization': f"Bearer {sett.whatsapp_token}"}
+    headers = {'Content-Type': 'application/json', 'Authorization': f"Bearer {sett.WHATSAPP_TOKEN}"}
     print("--- Enviando JSON ---")
     try:
         print(json.dumps(json.loads(data), indent=2, ensure_ascii=False))
     except:
         print(data)
     print("---------------------")
-    resp = requests.post(sett.whatsapp_url, headers=headers, data=data)
+    resp = requests.post(sett.WHATSAPP_URL, headers=headers, data=data)
     if resp.status_code != 200:
         print(f"Error {resp.status_code}: {resp.text}")
     return resp.text, resp.status_code
