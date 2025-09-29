@@ -7,7 +7,7 @@ app = Flask(__name__)
 
 @app.route('/bienvenido', methods=['GET'])
 def bienvenido():
-    return 'Hola, soy Mateo, tu asistente virtual Educacional. ¿En qué puedo ayudarte?'
+    return 'Hola, soy IAN, tu asistente virtual Educacional. ¿En qué puedo ayudarte?'
 
 @app.route('/status', methods=['GET'])
 def status():
@@ -22,7 +22,7 @@ def status():
         }
         return {
             'status': 'OK',
-            'message': 'Chatbot Mateo funcionando correctamente',
+            'message': 'Chatbot Agente Educacional IAN funcionando correctamente',
             'config': config_status
         }
     except Exception as e:
